@@ -1,0 +1,958 @@
+/**
+API references:
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/global
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/node_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/floatproperty_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/vec3_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/quat_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/array
+*/
+
+/****************************************************************************/
+/**
+* log() prints a message to the console.
+* s_AppName: global - Application Name
+* nr_Tab: global - Number of tabs to use
+* sLevel: String, eg DEBUG, INFO, WARN, ERROR, ...
+* sMethod: String, the calling method with/without parameters
+* sMessage: String, the log message
+*/
+
+function log(sLevel, sMethod, sMessage) {
+	if ( (b_isDebug == false) && (sLevel == "DEBUG") ) {
+		return;
+	}
+	var sTab = "\t";
+	for (var i = 0; i<nr_Tab; i++) {
+		sTab = sTab + "\t";
+	}
+	print(s_AppName + "\t" + sLevel + sTab + sMethod + "\t" + sMessage);
+}
+/****************************************************************************/
+/**
+* logInit() prints the call parameters to the console
+* sFunctionName: The function name
+* aStrValues: Array containg string values (or arrays with string values)
+*   For DzVec3 types DzVec3.x, DzVec3.y and DzVec3.z will be printed
+*/
+function logInit(sFunctionName, aStrValues) {
+	var tmpMsg = false;
+	for (var j=0; j<aStrValues.length; j++) {
+		if (tmpMsg) {
+			tmpMsg = tmpMsg + ", ";
+		} else {
+			tmpMsg = "";
+		}
+		if (Array.isArray(aStrValues[j])) {
+			// expand array with string values
+			tmpMsg = tmpMsg + "[" + aStrValues[j].join(";") + "]";
+		} else {
+			tmpMsg = tmpMsg + aStrValues[j];
+		}
+	}
+	log("DEBUG", sFunctionName, "init(" + tmpMsg + ")");
+}
+/**
+* getNodeNames returns an array with the names of the nodes
+*/
+function getNodeNames(aNodes) {
+	var sFunctionName = "getNodeNames"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = aNodes.length + "*";
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		var aStrNames = new Array();
+		for (var j=0; j<aNodes.length; j++) {
+			aStrNames.push(aNodes[j].getName());
+		}
+		return aStrNames;
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	}
+}
+
+
+/****************************************************************************/
+/**
+* getRootNode() returns the root node of the object
+* node: The selected / choosen node.
+* getDzFigure false or missing: The root node will be returned.
+* getDzFigure true: Return a DzFigure node.
+*/
+function getRootNode(node, returnDzFigure) {
+	var parentNode = node;
+	if ( !returnDzFigure ) {
+		returnDzFigure = false;
+	}
+	if ( returnDzFigure && (parentNode.className() == "DzFigure") ) {
+		return node;
+	}
+	var watchdog = 100;
+	var tempNode;
+	do {
+		watchdog--;
+		tempNode = parentNode.getNodeParent();
+		if (!tempNode) {
+			break;
+		}
+		parentNode = tempNode;
+		if ( returnDzFigure && (parentNode.className() == "DzFigure") ) {
+			break;
+		}
+
+	} while(watchdog > 0);
+	return parentNode;
+}
+/****************************************************************************/
+/**
+* getCollider(): Returns a collider
+* aNodeTargetNodes: Array with nodes the collider will collide with
+* colliderName: name of the collider
+*/
+function getCollider(aNodeTargetNodes, colliderName) {
+	var sFunctionName = "getCollider"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = getNodeNames(aNodeTargetNodes);
+			aValues[i++] = colliderName;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	var collider = Scene.findNodeByLabel(colliderName);
+	// target list of the collider can not be checked, assume that it is correct
+	if (!collider) {
+		
+		// Let the user know we are busy
+		setBusyCursor();
+		log("DEBUG", sFunctionName + "delCollider(" + colliderName + ")", "init");
+		
+		// store current scene selection
+		var primarySelection = Scene.getPrimarySelection();
+		var aSelectedNodes = Scene.getSelectedNodeList();
+		for (var i = 0; i < aSelectedNodes.length; i++) {
+			print("_off_" + aSelectedNodes[i].getName());
+			aSelectedNodes[i].select(false);
+		}
+		try {		
+			// select the aNodeTargetNodes
+			for (var i = 0; i < aNodeTargetNodes.length; i++) {
+				print("__on_" + aNodeTargetNodes[i].getName());
+				aNodeTargetNodes[i].select(true);
+			}	
+			
+			var aTmpSelectedNodes = Scene.getSelectedNodeList();
+			for (var i = 0; i < aTmpSelectedNodes.length; i++) {
+				print("Collider collides with:" + aTmpSelectedNodes[i].getName() + " (" + getRootNode(aTmpSelectedNodes[i], true).getName() + ")");
+			}		
+			
+			// create the collider
+			collider = new mcjColliderNode();
+			collider.setLabel(colliderName);
+			Scene.addNode(collider);
+			
+			// un-select the aNodeTargetNodes
+			for (var i = 0; i < aNodeTargetNodes.length; i++) {
+				print("_off_" + aNodeTargetNodes[i].getName());
+				aNodeTargetNodes[i].select(false);
+			}
+		} catch (e) {
+			// should never happen
+			print(e);
+		} finally {
+			// restore the scene selection
+			for (var i = 0; i < aSelectedNodes.length; i++) {
+				print("__on_" + aSelectedNodes[i].getName());
+				aSelectedNodes[i].select(true);
+			}
+			Scene.setPrimarySelection(primarySelection);
+
+			// Let the user know we are done
+			clearBusyCursor();	
+		}
+	}
+	return collider;
+}
+/****************************************************************************/
+/**
+* delCollider(): Deletes a collider
+* colliderName: name of the collider
+*/
+function delCollider(colliderName) {
+	var sFunctionName = "delCollider";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = colliderName;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	var collider = Scene.findNodeByLabel(colliderName);
+	if (collider) {
+		Scene.removeNode(collider);
+		log("DEBUG", sFunctionName, "Collider removed.");
+	}
+}
+/****************************************************************************/
+/**
+* showMessage() shows a popup message.
+* s_AppName: global Application Name (not passed as a parameter)
+* sLevel: String, eg DEBUG, INFO, WARN, ERROR, ...
+* sMessage: String, the log message
+*/ 
+function showMessage(sLevel, sMessage) {
+	MessageBox.information(sLevel + ": " + sMessage, s_AppName, "&OK" );
+}
+/****************************************************************************/
+/**
+* License for the code above this line:
+* You can use this script freely for personal or commercial use.
+* * You may not sell, resell, sub-license or rent this models in any way.
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+* INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+* PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+* FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+* ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+/****************************************************************************/
+
+
+
+
+/****************************************************************************/
+/**
+* The following code is based on
+* http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/geometry/generate_plane/start
+* License: https://creativecommons.org/licenses/by/3.0/
+* Modifications: sOrigin, parameters, unit only cm, plane size, return value
+*/
+/****************************************************************************/
+/**
+* Parameters:
+* sOrigin: "World Center" or "Object Center"
+* nDiameter: The diameter of the cylinder or sphere.
+* nSize: The height of the cylinder.
+* nSegments / nSides: Number of segments and sides of the cylinder or sphere.
+*
+* sOrigin: "World Center" or "Object Center"
+* nSize: The side length of the plane. The height of the cylinder.
+* nDivisions: Divisions of the plane
+*/
+function addCylinder(sOrigin, nDiameter, nSize, nSegments, nSides) {
+	var sFunctionName = "addCylinder";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nDiameter;
+			aValues[i++] = nSize;
+			aValues[i++] = nSegments;
+			aValues[i++] = nSides;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	// Sanity check the input values
+	if ( nSize <= 0.0 || nDiameter <= 0.0 || nSegments < 1 || nSides < 3 )
+	{
+		// We are done...
+		return;
+	}
+ 
+	// Let the user know we are busy
+	setBusyCursor();
+ 
+	// Create new node
+	var oNode = new DzNode();
+ 
+	// Set the node name;
+	// use a name that is consistent with the create primitive action
+	oNode.setName( "Cylinder" );
+ 
+	// Build the label of the node
+	var sLabel = String( "Cylinder %1x%2 %3%4 %5%6" )
+		.arg( nSides )
+		.arg( nSegments )
+		.arg( nSize )
+		.arg( sSizeUnit )
+		.arg( nDiameter )
+		.arg( sDiameterUnit );
+	oNode.setLabel( getUniqueLabel( sLabel ) );
+ 
+	// Create a new object
+	var oObject = new DzObject();
+ 
+	// Set the object name;
+	// use a name that is consistent with the create primitive action
+	oObject.name = String( "pCylinder(%1_%2)%3_%4" )
+				.arg( nSize )
+				.arg( nDiameter )
+				.arg( nSides )
+				.arg( nSegments );
+ 
+	// Create a new polygonal shape
+	var oFacetShape = new DzFacetShape();
+ 
+	// Set the shape name and label;
+	// use a name that is consistent with the create primitive action
+	oFacetShape.name = "Default";
+	oFacetShape.setLabel( oFacetShape.name );
+ 
+	// Create a new polygonal mesh
+	var oFacetMesh = new DzFacetMesh();
+ 
+	// Create a new default material
+	var oMaterial = new DzDefaultMaterial();
+ 
+	// Set the material name and label;
+	// use a name that is consistent with the create primitive action
+	oMaterial.name = "Default";
+	oMaterial.setLabel( oMaterial.name );
+ 
+	// Add the material to the shape
+	oFacetShape.addMaterial( oMaterial );
+ 
+	// Begin editing the mesh
+	oFacetMesh.beginEdit();
+ 
+	// Get the UV map
+	var oMap = oFacetMesh.getUVs();
+ 
+	// Activate the material; all new geometry will be added to this
+	oFacetMesh.activateMaterial( oMaterial.name );
+ 
+	// Declare some variables for generating the mesh
+	var i, j, nNext;
+	var x, y, z, nAngle, nSinAngle, nCosAngle;
+	var bAtSeam = false;
+	var vecUVsA = new DzVec3( 0, 0, 0 );
+	var vecUVsB = new DzVec3( 0, 0, 0 );
+ 
+	var nVerts = nSegments + 1;
+	var nRadius = nDiameter / 2;
+ 
+	// Pre-size the vertex array; faster than dynamic resizing
+	oFacetMesh.preSizeVertexArray( nSides * nVerts + 2 );
+ 
+	// Create the center vertex and UV for the bottom
+	oFacetMesh.addVertex( 0.0, 0.0, 0.0 );
+	vecUVsA.x = 0.25;
+	vecUVsA.y = 0.75;
+	oMap.appendPnt2Vec( vecUVsA );
+ 
+	// Create the center vertex and UV for the top
+	oFacetMesh.addVertex( 0.0, nSize, 0.0 );
+	vecUVsA.x = 0.75;
+	//vecUVsA.y = 0.75;
+	oMap.appendPnt2Vec( vecUVsA );
+ 
+	// Create the vertices and UVs for the sides
+	for( i = 0; i < nSides; i += 1 ){
+		nAngle = ((Math.PI * 2) * i) / nSides;
+		nSinAngle = Math.sin( nAngle );
+		nCosAngle = Math.cos( nAngle );
+ 
+		x = nSinAngle * nRadius;
+		z = nCosAngle * nRadius;
+ 
+		// Create an extra UV for the bottom
+		vecUVsA.x = (nSinAngle * 0.25) + 0.25;
+		vecUVsA.y = (nCosAngle * 0.25) + 0.75;
+		oMap.appendPnt2Vec( vecUVsA );
+ 
+		for( j = 0; j < nVerts; j += 1 ){
+			oFacetMesh.addVertex( x, nSize * j / nSegments, z );
+ 
+			vecUVsB.x = i / nSides;
+			vecUVsB.y = (j / (nVerts - 1)) * 0.5;
+			oMap.appendPnt2Vec( vecUVsB );
+		}
+ 
+		// Create an extra UV for the top
+		vecUVsA.x += 0.5;
+		vecUVsA.y = -(vecUVsA.y - 0.75) + 0.75;
+		oMap.appendPnt2Vec( vecUVsA );
+	}
+ 
+	// Create UVs for the seam
+	var nSeam = oMap.getNumValues();
+	vecUVsB.x = 1;
+	for( i = 0; i < nVerts; i += 1 ){
+		vecUVsB.y = (i / (nVerts - 1)) * 0.5;
+		oMap.appendPnt2Vec( vecUVsB );
+	}
+ 
+	// Pre-size the facet array; faster than dynamic resizing
+	oFacetMesh.preSizeFacets( nSides * (nSegments + 2) );
+ 
+	// Create the faces
+	var nUVs = nVerts + 2;
+	var aVertexIndices = new Array( 4 );
+	var aUvIndices = new Array( 4 );
+	for( i = 0; i < nSides; i += 1 ){
+		nNext = i + 1;
+		if( nNext >= nSides ){
+			bAtSeam = true;
+			nNext = 0;
+		}
+ 
+		aVertexIndices[0] = 0;
+		aUvIndices[0] = 0;
+ 
+		aVertexIndices[1] = nNext * nVerts + 2;
+		aUvIndices[1] = nNext * nUVs + 2;
+ 
+		aVertexIndices[2] = i * nVerts + 2;
+		aUvIndices[2] = i * nUVs + 2;
+ 
+		aVertexIndices[3] = -1;
+		aUvIndices[3] = -1;
+ 
+		oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+ 
+		for( j = 0; j < nSegments; j += 1 ){
+			aVertexIndices[0] = i * nVerts + 2 + j;
+			aUvIndices[0] = i * nUVs + 3 + j;
+ 
+			aVertexIndices[1] = nNext * nVerts + 2 + j;
+			aUvIndices[1] = bAtSeam ? nSeam + j : ( nNext * nUVs + 3 + j );
+ 
+			aVertexIndices[2] = nNext * nVerts + 3 + j;
+			aUvIndices[2] = bAtSeam ? nSeam + j + 1 : ( nNext * nUVs + 4 + j );
+ 
+			aVertexIndices[3] = i * nVerts + 3 + j;
+			aUvIndices[3] = i * nUVs + 4 + j;
+ 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+		}
+ 
+		aVertexIndices[0] = 1;
+		aUvIndices[0] = 1;
+ 
+		aVertexIndices[1] = ( i + 1 ) * nVerts + 1;
+		aUvIndices[1] = ( i + 1 ) * nUVs + 1;
+ 
+		aVertexIndices[2] = ( nNext + 1 ) * nVerts + 1;
+		aUvIndices[2] = ( nNext + 1 ) * nUVs + 1;
+ 
+		aVertexIndices[3] = -1;
+		aUvIndices[3] = -1;
+ 
+		oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+	}
+ 
+	// Finish editing the mesh
+	oFacetMesh.finishEdit();
+ 
+	// Set the mesh for the shape
+	oFacetShape.setFacetMesh( oFacetMesh );
+ 
+	// Add the shape to the object
+	oObject.addShape( oFacetShape );
+ 
+	// Add the object to the node
+	oNode.setObject( oObject );
+ 
+	// Get the local bounding box
+	var boxLocal = oNode.getLocalBoundingBox();
+	var vecMax = boxLocal.max;
+	var vecMin = boxLocal.min;
+ 
+	// If the user chose the object center for the origin
+	if( sOrigin == "Object Center" ){
+		// Get the middle of the height of the box
+		var nMid = (vecMax.y + vecMin.y) * 0.5;
+ 
+		// Set the origin; default and current
+		var vecOrigin = new DzVec3(0, nMid, 0);
+		oNode.setOrigin( vecOrigin, true );
+		oNode.setOrigin( vecOrigin );
+	}
+ 
+	// If the height of the bounding box is less than
+	// 1 unit (1cm) tall, set it to be 1 unit tall
+	if( vecMax.y < 1 ){
+		vecMax.y = 1;
+	}
+ 
+	// Set the end point; default and current
+	var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+	oNode.setEndPoint( vecEndPoint, true );
+	oNode.setEndPoint( vecEndPoint );
+ 
+	// Get the presentation for the node
+	var oPresentation = oNode.getPresentation();
+ 
+	// If the node did not have a presentation,
+	// create one and assign it to the node
+	if( !oPresentation ){
+		oPresentation = new DzPresentation();
+		oNode.setPresentation( oPresentation );
+	}
+ 
+	// Set the type of node
+	oPresentation.type = "Prop";
+ 
+	// Add the node to the scene
+	Scene.addNode( oNode );
+ 
+	// Let the user know we are done
+	clearBusyCursor();
+	
+	return oNode;
+}
+
+
+function addSphere(sOrigin, nDiameter, nSegments, nSides) {
+	var sFunctionName = "addSphere";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nDiameter;
+			aValues[i++] = nSegments;
+			aValues[i++] = nSides;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	// Sanity check the input values
+	if ( nDiameter <= 0.0 || nSegments < 1 || nSides < 3 )
+	{
+		// We are done...
+		return;
+	}
+ 
+	// Let the user know we are busy
+	setBusyCursor();
+ 
+	// Create new node
+	var oNode = new DzNode();
+ 
+	// Set the node name;
+	// use a name that is consistent with the create primitive action
+	oNode.setName( "Sphere" );
+ 
+	// Build the label of the node
+	var sLabel = String( "Sphere %1x%2 %3%4" )
+		.arg( nSides )
+		.arg( nSegments )
+		.arg( nDiameter )
+		.arg( sUnit );
+	oNode.setLabel( getUniqueLabel( sLabel ) );
+ 
+	// Create a new object
+	var oObject = new DzObject();
+ 
+	// Set the object name;
+	// use a name that is consistent with the create primitive action
+	oObject.name = String( "pSphere(%1)%2_%3" )
+				.arg( nDiameter )
+				.arg( nSides )
+				.arg( nSegments );
+ 
+	// Create a new polygonal shape
+	var oFacetShape = new DzFacetShape();
+ 
+	// Set the shape name and label;
+	// use a name that is consistent with the create primitive action
+	oFacetShape.name = "Default";
+	oFacetShape.setLabel( oFacetShape.name );
+ 
+	// Create a new polygonal mesh
+	var oFacetMesh = new DzFacetMesh();
+ 
+	// Create a new default material
+	var oMaterial = new DzDefaultMaterial();
+ 
+	// Set the material name and label;
+	// use a name that is consistent with the create primitive action
+	oMaterial.name = "Default";
+	oMaterial.setLabel( oMaterial.name );
+ 
+	// Add the material to the shape
+	oFacetShape.addMaterial( oMaterial );
+ 
+	// Begin editing the mesh
+	oFacetMesh.beginEdit();
+ 
+	// Get the UV map
+	var oMap = oFacetMesh.getUVs();
+ 
+	// Activate the material; all new geometry will be added to this
+	oFacetMesh.activateMaterial( oMaterial.name );
+ 
+	// Declare some variables for generating the mesh
+	var i, j, nNext;
+	var x, y, z, nAngle, nSinAngle;
+	var bAtSeam = false;
+	var vecUVs = new DzVec3( 0, 0, 0 );
+ 
+	var nVerts = nSegments - 1;
+	var nPoleSegments = nSegments - 2;
+	var nUvOffset = (nSides - 1) * 2;
+	var nHalfSize = nDiameter / 2;
+ 
+	// Pre-size the vertex array; faster than dynamic resizing
+	oFacetMesh.preSizeVertexArray( nSides * nVerts + 2 );
+ 
+	// Create vertices for the poles
+	oFacetMesh.addVertex( 0.0, 0.0, 0.0 );
+	oFacetMesh.addVertex( 0.0, nDiameter, 0.0 );
+ 
+	// Create UVs for the poles
+	var nOffset = 0.5 / nSides;
+	for( i = 0; i < nSides; i += 1 ){
+		vecUVs.x = i / nSides + nOffset;
+		vecUVs.y = 0;
+		oMap.appendPnt2Vec( vecUVs );
+		vecUVs.y = 1;
+		oMap.appendPnt2Vec( vecUVs );
+	}
+ 
+	// Create the vertices and UVs for the sides
+	for( i = 0; i < nSides; i += 1 ){
+		nAngle = ((Math.PI * 2) * i) / nSides;
+		x = Math.sin( nAngle ) * nHalfSize;
+		z = Math.cos( nAngle ) * nHalfSize;
+		vecUVs.x = i / nSides;
+		for( j = 0; j < nVerts; j += 1 ){
+			nAngle = Math.PI * (j + 1) / nSegments;
+			y = -Math.cos( nAngle ) * nHalfSize + nHalfSize;
+			nSinAngle = Math.sin( nAngle );
+			oFacetMesh.addVertex( x * nSinAngle, y, z * nSinAngle );
+			vecUVs.y = (j + 1) / nSegments;
+			oMap.appendPnt2Vec( vecUVs );
+		}
+	}
+ 
+	// Create UVs for the seam
+	var nSeam = oMap.getNumValues();
+	vecUVs.x = 1;
+	for( i = 0; i < nVerts; i += 1 ){
+		vecUVs.y = (i + 1) / nSegments;
+		oMap.appendPnt2Vec( vecUVs );
+	}
+ 
+	// Pre-size the facet array; faster than dynamic resizing
+	oFacetMesh.preSizeFacets( nSides * (nPoleSegments + 2) );
+ 
+	var aVertexIndices = new Array( 4 );
+	var aUvIndices = new Array( 4 );
+ 
+	// Create the faces
+	for( i = 0; i < nSides; i += 1 ){
+		nNext = i + 1;
+		if( nNext >= nSides ){
+			bAtSeam = true;
+			nNext = 0;
+		}
+ 
+		aVertexIndices[0] = 0;
+		aUvIndices[0] = i * 2;
+ 
+		aVertexIndices[1] = nNext * nVerts + 2;
+		aUvIndices[1] = bAtSeam ? nSeam : aVertexIndices[1] + nUvOffset;
+ 
+		aVertexIndices[2] = i * nVerts + 2;
+		aUvIndices[2] = aVertexIndices[2] + nUvOffset;
+ 
+		aVertexIndices[3] = -1;
+		aUvIndices[3] = -1;
+ 
+		oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+ 
+		for( j = 0; j < nPoleSegments; j += 1 ){
+			aVertexIndices[0] = i * nVerts + 2 + j;
+			aUvIndices[0] = aVertexIndices[0] + nUvOffset;
+ 
+			aVertexIndices[1] = nNext * nVerts + 2 + j;
+			aUvIndices[1] = bAtSeam ? nSeam + j : aVertexIndices[1] + nUvOffset;
+ 
+			aVertexIndices[2] = nNext * nVerts + 3 + j;
+			aUvIndices[2] = bAtSeam ? nSeam + j + 1 : aVertexIndices[2] + nUvOffset;
+ 
+			aVertexIndices[3] = i * nVerts + 3 + j;
+			aUvIndices[3] = aVertexIndices[3] + nUvOffset;
+ 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+		}
+ 
+		aVertexIndices[0] = 1;
+		aUvIndices[0] = i * 2 + 1;
+ 
+		aVertexIndices[1] = i * nVerts + nVerts + 1;
+		aUvIndices[1] = aVertexIndices[1] + nUvOffset;
+ 
+		aVertexIndices[2] = nNext * nVerts + nVerts + 1;
+		aUvIndices[2] = bAtSeam ? nSeam + nPoleSegments : aVertexIndices[2] + nUvOffset;
+ 
+		aVertexIndices[3] = -1;
+		aUvIndices[3] = -1;
+ 
+		oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+	}
+ 
+	// Finish editing the mesh
+	oFacetMesh.finishEdit();
+ 
+	// Set the mesh for the shape
+	oFacetShape.setFacetMesh( oFacetMesh );
+ 
+	// Add the shape to the object
+	oObject.addShape( oFacetShape );
+ 
+	// Add the object to the node
+	oNode.setObject( oObject );
+ 
+	// Get the local bounding box
+	var boxLocal = oNode.getLocalBoundingBox();
+	var vecMax = boxLocal.max;
+	var vecMin = boxLocal.min;
+ 
+	// If the user chose the object center for the origin
+	if( sOrigin == "Object Center" ){
+		// Get the middle of the height of the box
+		var nMid = (vecMax.y + vecMin.y) * 0.5;
+ 
+		// Set the origin; default and current
+		var vecOrigin = new DzVec3(0, nMid, 0);
+		oNode.setOrigin( vecOrigin, true );
+		oNode.setOrigin( vecOrigin );
+	}
+ 
+	// If the height of the bounding box is less than
+	// 1 unit (1cm) tall, set it to be 1 unit tall
+	if( vecMax.y < 1 ){
+		vecMax.y = 1;
+	}
+ 
+	// Set the end point; default and current
+	var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+	oNode.setEndPoint( vecEndPoint, true );
+	oNode.setEndPoint( vecEndPoint );
+ 
+	// Get the presentation for the node
+	var oPresentation = oNode.getPresentation();
+ 
+	// If the node did not have a presentation,
+	// create one and assign it to the node
+	if( !oPresentation ){
+		oPresentation = new DzPresentation();
+		oNode.setPresentation( oPresentation );
+	}
+ 
+	// Set the type of node
+	oPresentation.type = "Prop";
+ 
+	// Add the node to the scene
+	Scene.addNode( oNode );
+ 
+	// Let the user know we are done
+	clearBusyCursor();
+	
+	return oNode;
+}
+
+function addPlane(sOrigin, nSize, nDivisions) {
+	var sFunctionName = "addPlane";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nSize;
+			aValues[i++] = nDivisions;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	// Sanity check the input values
+	if ( nSize <= 0.0 || nDivisions < 1 )
+	{
+		// We are done...
+		return;
+	}
+	
+	// Let the user know we are busy
+	setBusyCursor();
+
+	// Create new node
+	var oNode = new DzNode();
+
+	// Set the node name;
+	// use a name that is consistent with the create primitive action
+	oNode.setName( "Plane" );
+
+	// Create a new object
+	var oObject = new DzObject();
+
+	// Set the object name;
+	// use a name that is consistent with the create primitive action
+	oObject.name = String( "pPlane(%1)%2" ).arg( nSize ).arg( nDivisions );
+
+	// Create a new polygonal shape
+	var oFacetShape = new DzFacetShape();
+
+	// Set the shape name and label;
+	// use a name that is consistent with the create primitive action
+	oFacetShape.name = "Default";
+	oFacetShape.setLabel( oFacetShape.name );
+
+	// Create a new polygonal mesh
+	var oFacetMesh = new DzFacetMesh();
+
+	// Create a new default material
+	var oMaterial = new DzDefaultMaterial();
+
+	// Set the material name and label;
+	// use a name that is consistent with the create primitive action
+	oMaterial.name = "Default";
+	oMaterial.setLabel( oMaterial.name );
+
+	// Add the material to the shape
+	oFacetShape.addMaterial( oMaterial );
+
+	// Begin editing the mesh
+	oFacetMesh.beginEdit();
+
+	// Get the UV map
+	var oMap = oFacetMesh.getUVs();
+
+	// Activate the material; all new geometry will be added to this
+	oFacetMesh.activateMaterial( oMaterial.name );
+
+	// Declare some variables for generating the mesh
+	var i, j, idx, numVerts = nDivisions + 1;
+	var x, z, nHalfSize = nSize / 2;
+	var vecUVs = new DzVec3( 0, 0, 0 );
+
+	// Pre-size the vertex array; faster than dynamic resizing
+	oFacetMesh.preSizeVertexArray( numVerts * numVerts );
+
+	// Create the vertices/uvs
+	for( i = 0; i < numVerts; i += 1 ) {
+		z = i / nDivisions;
+		vecUVs.y = z;
+		for( j = 0; j < numVerts; j += 1 ) {
+			x = j / nDivisions;
+			vecUVs.x = x;
+			oFacetMesh.addVertex( x * nSize - nHalfSize, 0, nHalfSize - z * nSize );
+			oMap.appendPnt2Vec( vecUVs );
+		}
+	}
+
+	// Pre-size the facet array; faster than dynamic resizing
+	oFacetMesh.preSizeFacets( nDivisions * nDivisions );
+
+	var aVertexIndices = new Array( 4 );
+
+	// Create the faces
+	for( i = 0; i < nDivisions; i += 1 ) {
+		for( j = 0; j < nDivisions; j += 1 ) {
+			aVertexIndices[0] = j + (i * numVerts);
+			aVertexIndices[1] = j + (i * numVerts) + 1;
+			aVertexIndices[2] = j + ((i + 1) * numVerts) + 1;
+			aVertexIndices[3] = j + ((i + 1) * numVerts);
+
+			oFacetMesh.addFacet( aVertexIndices, aVertexIndices );
+		}
+	}
+
+	// Finish editing the mesh
+	oFacetMesh.finishEdit();
+
+	// Set the mesh for the shape
+	oFacetShape.setFacetMesh( oFacetMesh );
+
+	// Add the shape to the object
+	oObject.addShape( oFacetShape );
+
+	// Add the object to the node
+	oNode.setObject( oObject );
+
+	// Get the local bounding box
+	var boxLocal = oNode.getLocalBoundingBox();
+	var vecMax = boxLocal.max;
+	var vecMin = boxLocal.min;
+
+	// If the user chose the object center for the origin
+	if( sOrigin == "Object Center" ){
+		// Get the middle of the height of the box
+		var nMid = (vecMax.y + vecMin.y) * 0.5;
+
+		// Set the origin; default and current
+		var vecOrigin = new DzVec3(0, nMid, 0);
+		oNode.setOrigin( vecOrigin, true );
+		oNode.setOrigin( vecOrigin );
+	}
+
+	// If the height of the bounding box is less than
+	// 1 unit (1cm) tall, set it to be 1 unit tall
+	if( vecMax.y < 1 ){
+		vecMax.y = 1;
+	}
+
+	// Set the end point; default and current
+	var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+	oNode.setEndPoint( vecEndPoint, true );
+	oNode.setEndPoint( vecEndPoint );
+
+	// Get the presentation for the node
+	var oPresentation = oNode.getPresentation();
+
+	// If the node did not have a presentation,
+	// create one and assign it to the node
+	if( !oPresentation ){
+		oPresentation = new DzPresentation();
+		oNode.setPresentation( oPresentation );
+	}
+
+	// Set the type of node
+	oPresentation.type = "Prop";
+
+	// Add the node to the scene
+	Scene.addNode( oNode );
+
+	// Let the user know we are done
+	clearBusyCursor();
+
+	return oNode;
+}

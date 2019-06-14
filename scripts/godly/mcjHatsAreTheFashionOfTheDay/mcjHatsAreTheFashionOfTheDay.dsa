@@ -1,0 +1,526 @@
+// DAZ Studio version 4.10 filetype DAZ Script
+
+//===============================================================================================
+// License
+// You can use this script freely for personal or commercial use.
+// You may not resell, distribute for profit, sub-license or rent this script in any way.
+// Many functions by mCasual/Jacques are used here. Sources:
+// https://sites.google.com/site/mcasualsdazscripts6/mcjautolimb2015
+// https://sites.google.com/site/mcasualsdazscripts2/mcjcolliderds45
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//
+//
+// Used source code from DAZ3D: http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/geometry/generate_plane/start
+// License: https://creativecommons.org/licenses/by/3.0/
+
+/****************************************************************************/
+/**
+* Global variables needed for the loaded library
+*/
+var s_AppName = "mcjHatsAreTheFashionOfTheDay";
+var nr_Tab = 1;
+var b_isDebug = true;
+
+const libraryFile = "godly/zzLib/zzLib.dsa";
+
+// Hair, character and head nodes needed for further processing
+var nodeHair, nodeCharacter, nodeHead;
+// Name of the character, plane and collider
+var strNameCharacter, strPlaneName, strColliderName;
+// Plane and collider to create the morph
+var oPlane;
+var oCollider;
+
+/**
+* The addiotional code to simplify the usage of mcjHatsAreTheFashionOfTheDay
+*/
+const helpMsg =  " Usage:\n- Make sure that the character is not parented to anything.\n- Select the hair of the character and start the script.\n  - A plane 'plane_Hat_CharacterName' will be created and the script exits. Parent it to the hat and adjust the height and orientation as needed.\n- Select the hair of the character and start the script again.\n- Click the 'Make Hair Morph' button.\n";
+function main() {
+	
+	if (!includeScript(libraryFile)) {
+		print("ERROR\tmain\tScript '" + strScriptName + "' not found.");
+		return false;
+	}
+	
+	nodeHair = Scene.getPrimarySelection();
+	if (!nodeHair) {
+		showMessage("ERROR", helpMsg);
+		return false;
+	}
+	
+	nodeCharacter = getRootNode(nodeHair);
+	nodeHead = nodeCharacter.findNodeChild("head", true);
+	if (!nodeHead) {
+		nodeHead = nodeCharacter.findNodeChildByLabel("Head", true);
+		if (!nodeHead) {
+			showMessage("ERROR", "Head not found. Rename the head bone back to 'Head' to fix this.");
+			return false;
+		}
+	}
+
+	strNameCharacter = nodeCharacter.getLabel();
+	strPlaneName = "plane_Hat_" + strNameCharacter;
+	strColliderName = "coll_Hat_" + strNameCharacter;
+	
+	// add/get plane
+	oPlane = Scene.findNodeByLabel(strPlaneName);
+	if (!oPlane) {
+		
+		// add the helper plane
+		oPlane = addPlane("World Center", 35, 1);
+		oPlane.setLabel(strPlaneName);
+		//nodeHead.addNodeChild(oPlane);
+
+		// position the plane
+		var vecHead = nodeHead.getWSPos();
+		oPlane.setWSPos(new DzVec3(vecHead.x, 10 + vecHead.y, vecHead.z));
+
+		// modify opacity  of the plane
+		var ooPlane = oPlane.getObject();
+		var shpPlane = ooPlane.getCurrentShape();
+		var matPlane = shpPlane.getAllMaterials();
+		matPlane[0].setBaseOpacity(0.7);
+		
+		showMessage("INFO", "Plane '" + strPlaneName + "' for '" + strNameCharacter + "' created.\nOptionally parent it to the hat.\nAdjust the plane to match the hat height and orientation.\nThen select the hair of '" + strNameCharacter + "' and start the script again.\n");
+		return false;
+	}
+	
+	// add collider
+	oCollider = getCollider(new Array(nodeHead), strColliderName);
+	oCollider.setLabel(strColliderName);
+	nodeHead.addNodeChild( oCollider );
+	if( !oCollider ) {
+		showMessage("ERROR", "Error: You must have the mcjCollider plugin installed.\n");
+		return false;
+	}
+	return true;
+}
+
+
+/**
+* includeScript() includes a script.
+* strScriptName: The script name.
+* aStrParameters: Skip or set to false to include the script. Setting this parameter to an array of strings ["a=1", "b=2"] will execute the script with these parameters.
+*/
+function includeScript(strScriptName, aStrParameters) {
+	var sFunctionName = "includeScript"; 	
+	if (b_isDebug) {
+		print("DEBUG\t" + sFunctionName + "\tinit(" + strScriptName + ", " + aStrParameters + ")");
+	}
+	var strScriptNamePath = "";
+	var i = 0;
+	while (i < App.getContentMgr().getNumContentDirectories()) {
+		strScriptNamePath = App.getContentMgr().getContentDirectoryPath(i) + "/scripts/" + strScriptName;
+		if (new DzFile(strScriptNamePath).exists()) {
+			break;
+		}
+		i++;
+		strScriptNamePath = "";
+	}
+	if (strScriptNamePath != "") {
+		if (!aStrParameters) {
+			include(strScriptNamePath);
+			return true;
+		}
+		var oScript = new DzScript(strScriptNamePath);
+		if (oScript.loadFromFile(strScriptNamePath, true)) {
+			var rv = oScript.execute(aStrParameters);
+			// use getArguments() in the script to read the parameters
+			// http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/remote_operation/sub_script/start#example_callee
+			return rv;
+		} else {
+			if (b_isDebug) {
+				print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "'but could not execute it.");
+			}
+			return false;
+		}
+	}
+	print("ERROR\t" + sFunctionName + "\tScript '" + strScriptName + "' not found.");
+	return false;		
+}
+
+if (!main()) {
+	nodeHair = false;
+}
+
+/*
+* Starting here: mcjHatsAreTheFashionOfTheDay.dsa (with minor modifications)
+*/
+
+
+// DAZ Studio version 4.10.0.107 filetype DAZ Script
+
+// License
+// by mCasual/Jacques 2019
+// You can use this script freely for personal or commercial use./
+// You may not sell, resell, sub-license or rent this models in any way./
+// you may credit this script  to mCasual/Jacques/
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var msg = "";
+
+var oPlaneUntransform;
+var oPlaneZero;
+var nodeHairUntransform;
+var nodeHairZero;
+
+var bendDist = 7
+var off = 0
+var vUp = new DzVec3( 0, 1, 0 );
+var oPlaneCenter;
+
+var wDlg;
+var wDlgLyt;
+var brow;
+var edName;
+
+if( ( nodeHair ) && ( oCollider ) )
+{
+    oPlaneCenter = oPlane.getWSPos();
+
+	var oPlaneTransform = oPlane.getWSTransform();
+	oPlaneUntransform   = oPlaneTransform.inverse();
+	var oPlaneNulpos    = oPlaneCenter;
+	oPlaneZero          = oPlaneUntransform.multMatrixVec( oPlaneNulpos );
+
+	var nodeHairTransform  = nodeHead.getWSTransform();
+	nodeHairUntransform    = nodeHairTransform.inverse();
+	var nodeHairNulpos     = new DzVec3( 0, 0, 0 );
+	nodeHairZero           = nodeHairUntransform.multMatrixVec( nodeHairNulpos );
+		
+	wDlg = new DzDialog;
+	wDlg.caption = s_AppName + " by mCasual/Jacques";
+
+	wDlgLyt = new DzVBoxLayout( wDlg );
+	wDlgLyt.autoAdd = true;
+	wDlgLyt.margin = 5;
+	wDlgLyt.spacing = 5;
+
+	var wOptsGB = new DzVGroupBox( wDlg );
+	wOptsGB.columns = 2;
+	new DzLabel( wOptsGB ).text = "Morph Name: "
+	edName = new DzLineEdit( wOptsGB );
+	edName.text = "mcjFitHat";	
+	
+	var wOptsGB2 = new DzVGroupBox( wDlg );
+	wOptsGB2.columns = 1;
+	sldTaper = new DzFloatSlider(wOptsGB2)
+	sldTaper.min = 0;
+	sldTaper.max = 30;
+	sldTaper.clamped = true;
+	sldTaper.label = "Taper distance below the oPlane level ( try 5cm )";
+	sldTaper.labelVisible = true;
+	sldTaper.value = getSetting( "sldTaper", 5 );
+
+	sldOff = new DzFloatSlider(wOptsGB2)
+	sldOff.min = -10;
+	sldOff.max = 10;
+	sldOff.clamped = true;
+	sldOff.label = "Air gap above the nodeHead ( try 2mm )";
+	sldOff.labelVisible = true;
+	sldOff.value = getSetting( "sldOff", 2 );
+	
+	cbFarOut = new DzCheckBox( wOptsGB2 );
+	cbFarOut.text = "Far hit instead of closest hit";
+	cbFarOut.checked = getBoolSetting( "cbFarOut", false );
+	
+	brow = new DzTextEdit( wDlg );
+
+	brow.append( "oPlane:     " + oPlane.getLabel() );
+	if( nodeHead.inherits( "DzBone" ) )
+		brow.append( "nodeHead:      " + nodeHead.getSkeleton().getLabel() + " / " + nodeHead.getLabel() );
+	else
+		brow.append( "nodeHead:      " + nodeHead.getLabel() );
+	brow.append( "nodeHair:      " + nodeHair.getLabel() );
+	brow.append( "oCollider:  " + oCollider.getLabel() );
+	
+	var gbC = new DzGroupBox( wDlg );
+	gbC.columns = 2;
+
+	btn4 = addButtonToGB( gbC, "Make Hair Morph", doit );
+		
+	btn5 = addButtonToGB( gbC, "Quick Help", help );
+
+	btn6 = addButtonToGB( gbC, "Web Help and Updates", webHelp );
+
+	
+	btn7 = addButtonToGB( gbC, "Exit", 0 );
+	
+	btn8 = addButtonToGB( gbC, "Show/Hide oPlane", toggleoPlaneVisibility );
+	btn9 = addButtonToGB( gbC, "0%/100% Morph", toggleMorphValue );
+
+	wDlg.setRejectButton( btn7 );
+	wDlg.minWidth = 400;
+	wDlg.exec();
+
+	delCollider(strColliderName);
+	saveAllSettings();
+}
+/** some more code **/
+function toggleoPlaneVisibility() {
+	oPlane.setVisible(!oPlane.isVisible());
+	processEvents();
+}
+function toggleMorphValue() {
+	var nodeHairObj = nodeHair.getObject();
+	var newMorphName = edName.text;
+	var mod = nodeHairObj.findModifier( newMorphName );
+	if( mod )
+	{
+		if (mod.getValueChannel().getValue() > 0){
+			mod.getValueChannel().setValue(0);
+		} else {
+			mod.getValueChannel().setValue( 1 );
+		}
+	}
+}
+//===============================================================================================
+//
+//===============================================================================================
+function webHelp()
+{
+	App.showURL( "https://github.com/godly/daz3d-scripts" );
+	App.showURL( "https://sites.google.com/site/mcasualsdazscripts9/" + s_AppName.lower() );
+}
+
+//==================================================================
+//
+//==================================================================
+function addButtonToGB( gb, text, func )
+{
+	var wButton = new DzPushButton( gb );
+	wButton.text = text;
+	if( func )
+		connect( wButton, "clicked()", func );
+	return( wButton );
+}	
+
+//==============================================================================
+//
+//==============================================================================
+function help()
+{
+	MessageBox.information( 
+		helpMsg, 
+		"Problem", 
+		"&OK"  
+	);
+}
+
+
+//====================================================================================
+//
+//====================================================================================
+function saveAllSettings()
+{
+	saveSetting( "sldTaper", sldTaper.value );
+	saveSetting( "sldOff",   sldOff.value   );
+	saveBoolSetting( "cbFarOut", cbFarOut.checked );
+}
+
+//====================================================================================
+//
+//====================================================================================
+function doit()
+{
+	var oldLodLevel = 0;
+	var oldRez = 0;
+	var nodeHairObj = nodeHair.getObject();
+	var nodeHairShp = nodeHairObj.getCurrentShape();
+	var lodlevel = nodeHairShp.findProperty( "lodlevel" );
+	var SubDIALevel = 0;
+	if( lodlevel )
+	{
+		oldLodLevel = lodlevel.getValue();
+		lodlevel.setValue( 0 ); //base
+		SubDIALevel = nodeHairShp.findProperty( "SubDIALevel" );
+		oldRez = SubDIALevel.getValue();
+		SubDIALevel.setValue( 0 );
+		processEvents();
+	}
+	var bendDist = sldTaper.value; //cm
+	var off = sldOff.value * 0.1;  //mm
+	var newMorphName = edName.text;
+	
+	var deltas = new DzMorphDeltas();
+	var nodeHairObj = nodeHair.getObject();
+	var mod = nodeHairObj.findModifier( newMorphName );
+	if( mod )
+	{
+		mod.getValueChannel().setValue(0);
+		processEvents(); //necessary?
+	}
+	var nodeHairObj = nodeHair.getObject(); //reacquire after processEvents just in case
+	var nodeHairGeom = nodeHairObj.getCachedGeom();
+	var n = nodeHairGeom.getNumVertices();
+	log("DEBUG", "doit", "NumVertices: " + n);
+	var progressStep = Math.round( n / 100 );
+	if( progressStep == 0 )
+	{
+		progressStep = 1;
+	}
+	var bCancelled = false;
+	startProgress( "Progress", n, true , true );
+	for( var i = 0; i < n; i++ )
+	{
+		if( i % progressStep == 0 )
+		{
+			updateProgress( i );
+		}
+		if( progressIsCancelled() )
+		{
+			finishProgress();
+			bCancelled = true;
+			break;
+		}
+		var v = nodeHairGeom.getVertex( i );
+		var uv = untransformoPlaneDelta( v );
+		if( uv.y > -bendDist )
+		{
+			oCollider.setWSPos( oPlaneCenter );
+			var dir = v.subtract( oPlaneCenter );
+			var r = dir.getRotationTo( vUp )
+			oCollider.setWSRot( r );
+			oCollider.activated();
+			var nuv = oCollider.getWSPos();
+			if( nuv.subtract( oPlaneCenter ).length() > 0.001 );
+			{
+				if( cbFarOut.checked )
+				{
+					nuv = oCollider.getHitMaxPos();  
+
+				}
+				var d = nuv.subtract( v );
+				if( off != 0 )
+				{
+					dir.normalize()
+					dir.x *= off;
+					dir.y *= off;
+					dir.z *= off;
+					d = d.add( dir );
+				}
+				if( uv.y < 0 )
+				{
+					f = ( bendDist + uv.y ) / bendDist;
+					d.x *= f;
+					d.y *= f;
+					d.z *= f;
+				}
+				d = untransformnodeHairDelta( d );
+				deltas.addDelta( i,d );
+			}
+		}
+	}
+	finishProgress();
+	var nodeHairObj = nodeHair.getObject();
+	var nodeHairShp = nodeHairObj.getCurrentShape();
+	var lodlevel = nodeHairShp.findProperty( "lodlevel" );
+	if( lodlevel )
+	{
+		lodlevel.setValue( oldLodLevel ); 
+		SubDIALevel = nodeHairShp.findProperty( "SubDIALevel" );
+		if( SubDIALevel )
+		{
+			SubDIALevel.setValue( oldRez );
+		}
+	}
+	if( !bCancelled )
+	{
+		toMorph( nodeHairObj, newMorphName, deltas )
+	}
+}
+
+//===============================================================================================
+//
+//===============================================================================================
+function untransformoPlaneDelta( v )
+{
+    var vu = oPlaneUntransform.multMatrixVec( v );
+    return( vu.subtract( oPlaneZero ) );
+} 
+
+//===============================================================================================
+//
+//===============================================================================================
+function untransformnodeHairDelta( v )
+{
+    var vu = nodeHairUntransform.multMatrixVec( v );
+    return( vu.subtract( nodeHairZero ) );
+} 
+
+//==============================================================================
+//
+//==============================================================================
+function toMorph( obj, newMorphName, deltas )
+{
+	var mod = obj.findModifier( newMorphName );
+	if( !mod )
+	{
+		mod = new DzMorph();
+		mod.setLabel( newMorphName );
+		mod.setName( newMorphName );
+		obj.addModifier( mod, 0 );
+	}
+	mod.setDeltas( deltas );
+	mod.getValueChannel().setValue( 1 );
+	return( mod );
+}
+
+//==============================================================================
+// save key/val in Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function saveSetting( key, keyVal )
+{
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	m_oMgr.setStringValue( key, keyVal );
+	m_oMgr.popPath();
+}
+
+//==============================================================================
+// save key/val in Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function saveBoolSetting( key, keyVal )
+{
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	m_oMgr.setBoolValue( key, keyVal );
+	m_oMgr.popPath();
+}
+
+//==============================================================================
+// load key/val from  Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function getSetting( key, defVal )
+{
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	var val = m_oMgr.getStringValue( key, defVal );
+	m_oMgr.popPath();
+	return ( val );
+}
+
+//==============================================================================
+// load key/val from  Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function getBoolSetting( key, defVal )
+{
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	var val = m_oMgr.getBoolValue( key, defVal );
+	m_oMgr.popPath();
+	return ( val );
+}
