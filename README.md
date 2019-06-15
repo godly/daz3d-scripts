@@ -2,6 +2,8 @@
 This is a collection of scripts for [DAZ Studio](https://www.daz3d.com/).
 Scripts:
 - [mcjHatsAreTheFashionOfTheDay](mcjHatsAreTheFashionOfTheDay.md)
+- to be done
+- to be done
 
 ### Installation
 Extract or copy the 'scripts' folder and all contents to the [DAZ Studio](https://www.daz3d.com/) library / content folder. In a default installation this should be: '**C:\Users\%USERNAME%\Documents\DAZ 3D\Studio\My Library**'. The resulting directory folder structure should be '**C:\Users\%USERNAME%\Documents\DAZ 3D\Studio\My Library\scripts\godly\**'
