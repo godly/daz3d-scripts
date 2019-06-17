@@ -1,0 +1,138 @@
+// DAZ Studio version 4.10 filetype DAZ Script
+
+//===============================================================================================
+// License
+// You can use this script freely for personal or commercial use.
+// You may not resell, distribute for profit, sub-license or rent this script in any way.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+/****************************************************************************/
+/**
+* Global variables needed for the loaded library
+*/
+const s_libraryFile = "godly/zzLib/zzLib.dsa";
+const s_AppName = "addThings";
+const b_isDebug = true;
+var nr_Tab = 1;
+
+main();
+
+
+function main() {
+	if (!includeScript(s_libraryFile)) {
+		print("ERROR\tmain\tScript '" + s_libraryFile + "' not found.");
+		return false;
+	}
+	
+	var oArrowDef, oArrow;
+	var nodeGrab, nodeCharacterBone;
+	if (!Scene.findNodeByLabel("thing-L")) {
+		oArrowDef = new arrowDefinition("thing-L", Color(255, 64, 64)); // grab-L
+		oArrow = getArrow(oArrowDef);
+		oArrow.setWSPos(new DzVec3(50, 150, 0));
+	}
+	if (!Scene.findNodeByLabel("thing-R")) {
+		oArrowDef = new arrowDefinition("thing-R", Color(64, 255, 64)); // grab-R
+		oArrow = getArrow(oArrowDef);
+		oArrow.setWSPos(new DzVec3(-50, 150, 0));
+	}
+	if (!Scene.findNodeByLabel("floor-L")) {		
+		oArrowDef = new arrowDefinition("floor-L", Color(255, 0, 0)); // step-L
+		oArrow = getArrow(oArrowDef);
+		oArrow.setWSPos(new DzVec3(20, 0, 0));
+	}
+	if (!Scene.findNodeByLabel("floor-R")) {
+		oArrowDef = new arrowDefinition("floor-R", Color(0, 255, 0)); // step-R
+		oArrow = getArrow(oArrowDef);
+		oArrow.setWSPos(new DzVec3(-20, 0, 0));
+	}
+	
+	nodeCharacter = Scene.getPrimarySelection();
+	if ( (!nodeCharacter) || (!nodeCharacter.findNodeChild("lCarpal2", true)) ) {
+		MessageBox.information( qsTr("To add 'grab-' and 'step-'nodes select the character and run the script again."), qsTr(s_AppName), qsTr("&OK"));
+		return;
+	} 
+	if (!Scene.findNodeByLabel("grab-L")) {
+		nodeGrab = new DzNode();
+		Scene.addNode(nodeGrab);
+		nodeGrab.setName("grab-L");
+		nodeGrab.setVisible(false);
+		nodeCharacterBone = nodeCharacter.findNodeChild("lCarpal2", true);
+		nodeCharacterBone.addNodeChild(nodeGrab);
+	}
+	if (!Scene.findNodeByLabel("grab-R")) {
+		nodeGrab = new DzNode();
+		Scene.addNode(nodeGrab);
+		nodeGrab.setName("grab-R");
+		nodeGrab.setVisible(false);
+		nodeCharacterBone = nodeCharacter.findNodeChild("rCarpal2", true);
+		nodeCharacterBone.addNodeChild(nodeGrab);
+	}
+	if (!Scene.findNodeByLabel("step-L")) {
+		nodeGrab = new DzNode();
+		Scene.addNode(nodeGrab);
+		nodeGrab.setName("step-L");
+		nodeGrab.setVisible(false);
+		nodeCharacterBone = nodeCharacter.findNodeChild("lMetatarsals", true);
+		nodeCharacterBone.addNodeChild(nodeGrab);
+	}
+	if (!Scene.findNodeByLabel("step-R")) {
+		nodeGrab = new DzNode();
+		Scene.addNode(nodeGrab);
+		nodeGrab.setName("step-R");
+		nodeGrab.setVisible(false);
+		nodeCharacterBone = nodeCharacter.findNodeChild("lMetatarsals", true);
+		nodeCharacterBone.addNodeChild(nodeGrab);
+	}
+	
+}
+
+	
+/****************************************************************************/
+/**
+* includeScript() includes a script.
+* strScriptName: The script name.
+* aStrParameters: Skip or set to false to include the script. Setting this parameter to an array of strings ["a=1", "b=2"] will execute the script with these parameters.
+*/
+function includeScript(strScriptName, aStrParameters) {
+	var sFunctionName = "includeScript"; 	
+	if (b_isDebug) {
+		print("DEBUG\t" + sFunctionName + "\tinit(" + strScriptName + ", " + aStrParameters + ")");
+	}
+	var strScriptNamePath = "";
+	var i = 0;
+	while (i < App.getContentMgr().getNumContentDirectories()) {
+		strScriptNamePath = App.getContentMgr().getContentDirectoryPath(i) + "/scripts/" + strScriptName;
+		if (new DzFile(strScriptNamePath).exists()) {
+			break;
+		}
+		i++;
+		strScriptNamePath = "";
+	}
+	if (strScriptNamePath != "") {
+		if (!aStrParameters) {
+			include(strScriptNamePath);
+			return true;
+		}
+		var oScript = new DzScript(strScriptNamePath);
+		if (oScript.loadFromFile(strScriptNamePath, true)) {
+			var rv = oScript.execute(aStrParameters);
+			// use getArguments() in the script to read the parameters
+			// http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/remote_operation/sub_script/start#example_callee
+			return rv;
+		} else {
+			if (b_isDebug) {
+				print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "' but could not execute it.");
+			}
+			return false;
+		}
+	}
+	print("ERROR\t" + sFunctionName + "\tScript '" + strScriptName + "' not found.");
+	return false;		
+}

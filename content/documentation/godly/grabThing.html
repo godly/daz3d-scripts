@@ -1,0 +1,129 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<title>grabThing Beta - Help</title>
+</head><body>
+
+<h1>grabThing Beta</h1>
+<p><b>WARNING:</b> This beta version is not ready for animations, it processes only frame 0 and has some issues.<br/></p>
+<p>
+'grabThing' allows the character to grab things. While it may be fun to close the hand and fingers manually around an object the computer may do it (better).<br/>
+It requires the <a href="https://sites.google.com/site/mcasualsdazscripts2/mcjcolliderds45">mCasual/Jacques collider</a>.<br/>
+</p>
+
+<h3>Issues</h3>
+<p><ol>
+<li>The collider collides with the whole character and not only the hand/foot and the target object. Calculating the collitions takes more time than needed.</li>
+<li>Rotating the arm in fron of the body often fails.</li>
+<li>Clicking the buttons multiple times is possible and leads to unexpected results.</li>
+<li>There is yet no prgress indicator or option to stop the script.</li>
+<li>Settings are not stored.</li>
+<li>Support for feet is partitionally implemented and does not work properly.</li>
+</ol></p>
+
+<h2>Quickstart</h2>
+<p>
+For your convience you may use the "zShowcaseGrab" script for initial tests. These steps may be also carried out manually:<br/>
+<ol>
+<li>The "zShowcaseGrab" script will clear the scene.</li>
+<li>Load G8F ('grabThing' will work also with other characters with similar bone/node structures liek G3F).</li>
+<li>The null item "grab-R" will be created and parented to "Right Carpal 2" of G8F</li>
+<li>A broomstick (cylinder - you have enough imagination) is added to the scene and moved in front of G8F. You may also rotate it. (Make sure that G8F can reach it. Do not parent it to the hand or it will move when the hand moves!)</li>
+<li>Also the arrows will be added. - Not true, DazStudio 4.10 crashes here so you need to lauch "addThings" and then "zShowcaseGrab" again to complete the script.</li>
+<li>The parent of "thing-R" will be set to "cylinder".</li>
+<li>"thing-R" will be moved and rotated to be reachable by G8F.</li>
+</ol>
+</p>
+<p>Now the "grabThing" script can be launched. Use the "Bend Limb", "Aim Limb" and "Twist Hand" buttons a few times until the hand is in the proper position.<br/>
+As the thumb has some limits or the cylinder is too large some parameters should be adjusted for a better grip. The hand may look then odd. The "zShowcaseGrab" script adjusts these values:
+<ol>
+<li>Hand: Side-Side: 28</li>
+<li>Right Thumb 1: Twist &#x1F323;: Parameter Settings ...: [ ] Use Limits</li>
+<li>Right Thumb 1: Twist: 90</li>
+<li>Right Thumb 1: Bend: -40</li>
+<li>Right Thumb 1: Up-Down &#x1F323;: Parameter Settings ...: [ ] Use Limits</li>
+<li>Right Thumb 1: Up-Down: 50</li>
+</ol>
+Launch the "grabThing" script. Set "Twist offset" to "-10" and the "Bend offset" to "-2". Use the "Bend Limb", "Aim Limb" and "Twist Hand" buttons a few times until the hand is in the proper position.
+Now it would be a good time to exit the script, and look at the scene from multiple directions before gripping the cylinder.<br/>
+Make sure to set the rendermode to something else than "IRAY®". Moving bones while "IRAY®" is active may take much longer and there's no way to stop the script once it's runnning. Clicking "Exit" will close the dialog and allows to change the render mode while the script is still running.<br/>
+Launch the "grabThing" script again if you exited it and select "Grab". As long as the "Aim", "Twist" and "Bend" functions are not used the values have no effect. There's no need to set them to "-10" or "-2" again.<br/>
+Hide or delete all visible helper nodes and arrows before rendering.
+</p>
+
+<h2>Usage</h2>
+After following the quick start guide it should be easy to use. Obviously a character and an item is needed.<br/>
+The script will look for matching "thing-L/R" and "grab-L/R" pairs and for "floor-L/R" and "step-L/R" pairs.<br/>
+
+<h3>Character</h3>
+<p>
+The grabbing body part (eg. left hand) must be identified by the script which is looking for an item named "grab-L" (for the left hand), "grab-R", "step-L" and/or "step-R" (for the right foot).<br/>
+A null item "grab-L/R" should be created and parented to "Left/Right Carpal 2". That's usually the best bone to attach to for grabbing.<br/>
+A null item "step-L/R" should be created and parented to "Left/Right Metatarsals" or a toe.<br/>
+The position of the null items does not matter, they are only used to get the right parent item. They may be hidden right after creation.<br/>
+</p>
+
+<h3>Item</h3>
+<p>
+A node named "thing-L", "thing-R", "floor-L" and/or "floor-R" must be parented to the item to grab. It is recommended to use <b>addThings</b> to create these items. One may use also null or other items for this purpose while the pointing direction of other items may be hard to identify.<br/>
+The arrow base should be placed inside the object.<br/>
+The inner side of the hand (eg "Right Carpal 2") will be rotated by <b>grabThing</b> so that it points to the arrow. After grabbing the arrow looks like a nail in the hand<br/>
+<ul>
+<li>To lay things in the hand the arrow should point down.</li>
+<li>To grab something laying around the arrow should point upwards.</li>
+<li>To grab a glass or bottle the arrow should point into a horizontal direction, the rotation defines where the hand touches it.</li>
+</ul>
+
+<h3>Touch yourself</h3>
+<p>
+Characters can touch their own body parts. If "thing/floor-L/R" is parented to G8F or a bone the script will clone the character during startup. This will take some time! The clone will have the same name with the suffix ".clone". This will happen only one time.<br/>
+The grabing/touching arms/feet of the clone must be moved out of the way to avoid problems during the grab process.. The part to be grabbed/touched must stay in place. Then the clone may be hidden. After grabbing is complete the clone may be deleted.<br/>
+It may be easier to position and rotate the arrow before parenting it to a character.<br/>
+If you move the character or the body part to be grapped around or change the size/shape then the cloned character will no longer match the current character. You may either apply the same changes to the clone or delete it to create a new clone.
+</p>
+
+<h2>Addendum</h2>
+<h3>Script: addThings</h3>
+<p>
+The script "addThings" adds four arrows (thing-L, thing-R, floor-L, floor-R), one for each hand and foot. These are special items.<br/> 
+The special item "thing-R" should have a parent (eg. sphere, bottle, ...). The starting point should be placed inside the object.<br/>
+The hand will be rotated that the arrow points to the inner side of the hand.<br/>
+Depending on the angle of the arrow the item will be placed in the hand, the hand will be over it or the hand will grab it from the right.<br/>
+Having a position and an angle to adjust may seem to be complicated but the computer can not guess where the place the hand on a sphere or a long cylinder.<br/>
+These items may be deleted if not needed and should be hidden before rendering.<br/>
+Instead of the arrows also null nodes named "thing-L, ..." may be used. Anyhow there the rotation and direction may be harder to set.
+</p>
+
+<h3>Script: grabThing</h3>
+<p>
+This is the main script to grab items.
+<ol>
+<li>The "Bend Limb" function bends the arm (or leg) to have the proper length to reach the target.</li>
+<li>The "Grab node scale" value refers to the bone parented by the "grab/touch-L/R" item. 50% (0.50) means that grabbing occurs at the middle of the bone. 100% (1.00) is the end of the bone. The default it 80% (0.80) which seems to be a reasonable value for the hand bones.</li>
+<li>The "Aim Limb" function tries to rotate the arm (or leg) to the target. This does not always work properly.</li>
+<li>The "Aim distance offset" value may be used to place the hand in the object or further away.</li>
+<li>The "Twist " and "Bend Hand/Foot" buttons twist and bend the hand to grab the object with the right angle.</li>
+<li>The "Twist offset" and "Bend offset" values may be used to adjust the twist and bend of the hand. The same result may be achieved by rotating the arrow.</li>
+<li>The "Grab" function is time consuming. It rotates every bone and uses colliders to detect the collision with the item.</li>
+<li>The "Finger bend selection" allows to deselect bones which will not be processed during the grab process.</li>
+</ol>
+The collision detection could be improved by using more colliders which would also increase the time to process the function.<br/>
+<b>WARNING:</b> Launching the script sets all values to default. None of the values are stored persistent which may be annoying.<br/>
+</p>
+
+<h3>Scripts and Files</h3>
+<ul>
+<li>scripts/godly/!Readme.dsa: Launches the help page.</li>
+<li>scripts/godly/addThings.dsa: Adds four arrows to the scene. They are named properly to be parented to objects.</li>
+<li>scripts/godly/grabThing.dsa: The main script to grab items.</li>
+<li>scripts/godly/zShowcaseGrab.dsa: This script is used to create a simple scene to grab an item.</li>
+<li>library.dsa: Helper functions. Should be hidden somewhere.</li>
+<li>scripts/godly/cylinder.obj: Helper object for Showcase.dsa.</li>
+<li>documentation/godly/grabThing.html: This page</li>
+</ul>
+
+<h3>HDRI Backgrounds and Tools used</h3>
+<a href="https://hdrihaven.com/">HDRI Haven</a> has free 16k unclipped backgrounds. They may be used for more realistic IRAY® renders.<br/>
+<a href="https://sites.google.com/site/mcasualsdazscripts2/mcjcolliderds45">mCasual/Jacques collider</a> detects mesh collisions.<br/>
+<a href="https://www.nvidia.com/en-gb/design-visualization/iray/">NVIDIA® IRAY®</a> is a rendering technology.<br/>
+<a href="https://www.daz3d.com/">DAZ Studio</a> is a 3D Composition & Rendering Software.<br/>
+</body></html>

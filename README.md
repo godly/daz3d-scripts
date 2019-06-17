@@ -2,12 +2,18 @@
 This is a collection of scripts for [DAZ Studio](https://www.daz3d.com/).
 Scripts:
 - [mcjHatsAreTheFashionOfTheDay](mcjHatsAreTheFashionOfTheDay.md)
+- [grabThing Beta](grabThing.md)
 - to be done
 - to be done
 
 ### Installation
-Extract or copy the 'scripts' folder and all contents to the [DAZ Studio](https://www.daz3d.com/) library / content folder. In a default installation this should be: '**C:\Users\%USERNAME%\Documents\DAZ 3D\Studio\My Library**'. The resulting directory folder structure should be '**C:\Users\%USERNAME%\Documents\DAZ 3D\Studio\My Library\scripts\godly\**'
-The scripts will be found in  **My Library / Scripts / godly**
+Extract or copy the contents of the 'content' folder to the [DAZ Studio](https://www.daz3d.com/) library / content folder.
+In a default installation this should be: '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library**'.
+The resulting directory folder structure should be '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library\scripts\godly\**'
+The scripts will be found in **My Library / Scripts / godly**
+
+### Removal
+As long as no other scripts were installed in the scripts/godly simply delete the godly folder.
 
 ### License
 Multiple licences are used. Read the comments in the .dsa files for more details.

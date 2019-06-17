@@ -1,0 +1,203 @@
+// DAZ Studio version 4.10 filetype DAZ Script
+
+//===============================================================================================
+// License
+// You can use this script freely for personal or commercial use.
+// You may not resell, distribute for profit, sub-license or rent this script in any way.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+/****************************************************************************/
+/**
+* Global variables needed for the loaded library
+*/
+const libraryFile = "godly/zzLib/zzLib.dsa";
+const s_AppName = "zShowcaseGrab";
+const b_isDebug = true;
+var nr_Tab = 1;
+
+var strNodeCrash = s_AppName + ".fixCrash";
+var nodeCrash = Scene.findNodeByLabel(strNodeCrash);
+var strNodeDone = s_AppName + ".done";
+var nodeDone = Scene.findNodeByLabel(strNodeDone);
+
+if (MessageBox.warning( qsTr("Existing scene will be cleared."), qsTr(s_AppName + " - Continue ?"), qsTr("&OK"), qsTr("&Cancel") ) == 0 ) {
+	main();
+	main2();
+}
+	
+/*	
+if (nodeDone) {
+	MessageBox.information( qsTr("Delete the '" + s_AppName + ".*' nodes to run the script again.\nThis may be a bad idea."), qsTr(s_AppName), qsTr("&OK") );
+} else {
+	if (!nodeCrash) {
+		if (MessageBox.warning( qsTr("Existing scene will be cleared."), qsTr(s_AppName + " - Continue ?"), qsTr("&OK"), qsTr("&Cancel") ) == 0 ) {
+			main();
+		}
+	} else {
+		main2();
+	}
+}
+*/
+
+function main() {
+	if (!includeScript(libraryFile)) {
+		print("ERROR\tmain\tScript '" + libraryFile + "' not found.");
+		return false;
+	}
+	
+	// ################################################################ STEP 2 - Clear scene
+	Scene.clear();
+
+	// ################################################################ STEP 2 - Add G8F
+	var strSceneName = "/People/Genesis 8 Female/Genesis 8 Basic Female.duf";
+	print("eeee " + strSceneName);
+	var strContentLocation = getAbsolutePath(strSceneName);
+	var nodeCharacter;
+	if ( strContentLocation ) {
+		App.getContentMgr().openNativeFile(strContentLocation, true);
+		nodeCharacter = Scene.findNodeByLabel("Genesis 8 Female");
+		nodeCharacter.select(true);
+		
+		strSceneName = "/People/Genesis 8 Female/Clothing/Basic Wear/Basic Wear 02.duf";
+		strContentLocation = getAbsolutePath(strSceneName);
+		if ( strContentLocation ) {
+			App.getContentMgr().openNativeFile(strContentLocation, true);
+		}
+	} else {
+		MessageBox.information(strSceneName + " not found!", s_AppName, "&OK" );
+		return -1;
+	}
+
+	// ################################################################ STEP 3a - Add "grab-R"
+	var nodeGrab = new DzNode();
+	Scene.addNode(nodeGrab);
+	nodeGrab.setName("grab-R");
+	nodeGrab.setVisible(false);
+
+	// ################################################################ STEP 3b - Parent it to G8F
+	var nodeCharacterCarpal2 = nodeCharacter.findNodeChild("rCarpal2", true);
+	nodeCharacterCarpal2.addNodeChild(nodeGrab);
+
+	// ################################################################ STEP 4 - Add and position cylinder
+/*
+	strContentLocation = getAbsolutePath("/scripts/grabThing/cylinder.obj");
+	loadObject(strContentLocation);
+	var nodeCylinder = Scene.findNodeByLabel("cylinder");
+*/
+	var nodeCylinder = addCylinder("", 5, 200, 1, 32);
+	nodeCylinder.setName("cylinder");
+	nodeCylinder.setLabel("cylinder");
+	nodeCylinder.setWSPos(new DzVec3(-30, 0, 20));
+
+	// ################################################################ STEP 5 - Load arrows
+/*	
+	strContentLocation = getAbsolutePath("/scripts/grabThing/addThings.dsa");
+	// loadObject(strContentLocation); // DazStudio 4.10 crashes here. Thus we have to keep the user busy:
+	nodeCrash = new DzNode();
+	Scene.addNode(nodeCrash);
+	nodeCrash.setName(strNodeCrash);
+	MessageBox.information( qsTr("Please execute now 'addThings' and then '" + s_AppName + "' again."), qsTr(s_AppName), qsTr("&OK"));
+*/
+	// ################################################################ Add arrow
+	var oArrowDef;
+	var oArrow;
+	if (!Scene.findNodeByLabel("thing-R")) {
+		oArrowDef = new arrowDefinition("thing-R", Color(64, 255, 64)); // grab-R
+		oArrow = getArrow(oArrowDef);
+		oArrow.setWSPos(new DzVec3(-50, 150, 0));
+	}
+	//nodeCrash = new DzNode();
+	//Scene.addNode(nodeCrash);
+	//nodeCrash.setName(strNodeCrash);
+	//MessageBox.information( qsTr("Please execute now 'addThings' and then '" + s_AppName + "' again."), qsTr(s_AppName), qsTr("&OK"));
+}
+function main2() {
+	if (!includeScript(libraryFile)) {
+		print("ERROR\tmain\tScript '" + libraryFile + "' not found.");
+		return false;
+	}
+	
+	var nodeCharacter = Scene.findNodeByLabel("Genesis 8 Female");
+	var nodeCylinder = Scene.findNodeByLabel("cylinder");
+	
+	// ################################################################ STEP 6 - Parent and position arrows
+	var nodeArrowThingR = Scene.findNodeByLabel("thing-R");
+	nodeCylinder.addNodeChild(nodeArrowThingR);
+	nodeArrowThingR.setWSPos(new DzVec3(-30, 120, 20));
+	var a = Math.sqrt(2)/2;
+	nodeArrowThingR.setWSRot(new DzQuat(0, 0,  -a, a));
+	
+	// ################################################################ STEP 7 - Rotate the hand
+	var nodeCharacterHandR = nodeCharacter.findNodeChild("rHand", true);
+	var ctrlYHandR = nodeCharacterHandR.getYRotControl();
+	ctrlYHandR.setValue(28);
+	
+	var nodeCharacterThumbR1 = nodeCharacter.findNodeChild("rThumb1", true);
+	var ctrlX = nodeCharacterThumbR1.getXRotControl();
+	ctrlX.setMax(90);
+	ctrlX.setValue(90);
+	var ctrlY = nodeCharacterThumbR1.getYRotControl();
+	ctrlY.setValue(-40);
+	var ctrlZ = nodeCharacterThumbR1.getZRotControl();
+	ctrlZ.setMax(50);
+	ctrlZ.setValue(50);
+	
+	//nodeDone = new DzNode();
+	//Scene.addNode(nodeDone);
+	//nodeDone.setName(strNodeDone);
+	MessageBox.information( qsTr("Now run 'grabThing'."), qsTr(s_AppName), qsTr("&OK"));
+}
+
+
+/****************************************************************************/
+/**
+* includeScript() includes a script.
+* strScriptName: The script name.
+* aStrParameters: Skip or set to false to include the script. Setting this parameter to an array of strings ["a=1", "b=2"] will execute the script with these parameters.
+*/
+function includeScript(strScriptName, aStrParameters) {
+	var sFunctionName = "includeScript"; 	
+	if (b_isDebug) {
+		print("DEBUG\t" + sFunctionName + "\tinit(" + strScriptName + ", " + aStrParameters + ")");
+	}
+	var strScriptNamePath = "";
+	var i = 0;
+	while (i < App.getContentMgr().getNumContentDirectories()) {
+		strScriptNamePath = App.getContentMgr().getContentDirectoryPath(i) + "/scripts/" + strScriptName;
+		if (new DzFile(strScriptNamePath).exists()) {
+			break;
+		}
+		i++;
+		strScriptNamePath = "";
+	}
+	if (strScriptNamePath != "") {
+		if (!aStrParameters) {
+			include(strScriptNamePath);
+			return true;
+		}
+		var oScript = new DzScript(strScriptNamePath);
+		if (oScript.loadFromFile(strScriptNamePath, true)) {
+			var rv = oScript.execute(aStrParameters);
+			// use getArguments() in the script to read the parameters
+			// http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/remote_operation/sub_script/start#example_callee
+			return rv;
+		} else {
+			if (b_isDebug) {
+				print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "' but could not execute it.");
+			}
+			return false;
+		}
+	}
+	print("ERROR\t" + sFunctionName + "\tScript '" + strScriptName + "' not found.");
+	return false;		
+}
+
+
+
+

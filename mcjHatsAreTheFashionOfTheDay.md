@@ -9,8 +9,14 @@ Usage:
 - Click the "Make Hair Morph" button.
 - More information about the possible settings can be found in [mcjHatsAreTheFashionOfTheDay]( https://sites.google.com/site/mcasualsdazscripts9/mcjhatsarethefashionoftheday).
 
-### Installation
-Extract or copy the 'scripts' folder and all contents to the [DAZ Studio](https://www.daz3d.com/) library / content folder. In a default installation this should be: '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library**'. The resulting directory folder structure should be '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library\scripts\godly\**'
-
 This mcjHatsAreTheFashionOfTheDay.dsa script will be found in the 'Content Library' in **DAZ Studio Formats / My Library / Scripts / godly / mcjHatsAreTheFashionOfTheDay**.
 mCasual's script will be (if installed) in **DAZ Studio Formats / My Library / Scripts / mcasual**.
+
+### Installation
+Extract or copy the contents of the 'content' folder to the [DAZ Studio](https://www.daz3d.com/) library / content folder.
+In a default installation this should be: '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library**'.
+The resulting directory folder structure should be '**C:\Users\\%USERNAME\%\Documents\DAZ 3D\Studio\My Library\scripts\godly\**'
+The scripts will be found in **My Library / Scripts / godly / mcjHatsAreTheFashionOfTheDay**
+
+### Removal
+As long as no other scripts were installed in the scripts/godly simply delete the godly folder.

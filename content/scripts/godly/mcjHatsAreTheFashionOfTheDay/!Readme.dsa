@@ -1,0 +1,10 @@
+// open the corresponding HTML help file
+
+// Create a file info object, using the path of the current script
+var oFileInfo = new DzFileInfo( getScriptFileName() );
+
+var strPath = oFileInfo.path();
+strPath = strPath.replace(/\/scripts\/godly\//ig, '/documentation/godly/');
+
+// Prompt the operating system to do whatever it does with the given file type; same path/name as script
+App.showURL( String("file:///%1.html").arg( strPath ));

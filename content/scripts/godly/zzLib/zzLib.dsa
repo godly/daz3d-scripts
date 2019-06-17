@@ -1,0 +1,2092 @@
+/**
+API references:
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/global
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/node_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/floatproperty_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/vec3_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/quat_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/array
+*/
+
+/****************************************************************************/
+/**
+* log() prints a message to the console.
+* s_AppName: global - Application Name
+* nr_Tab: global - Number of tabs to use
+* sLevel: String, eg DEBUG, INFO, WARN, ERROR, ...
+* sMethod: String, the calling method with/without parameters
+* sMessage: String, the log message
+*/
+function log(sLevel, sMethod, sMessage) {
+	if ( (b_isDebug == false) && (sLevel == "DEBUG") ) {
+		return;
+	}
+	var sTab = "\t";
+	for (var i = 0; i<nr_Tab; i++) {
+		sTab = sTab + "\t";
+	}
+	print(s_AppName + "\t" + sLevel + sTab + sMethod + "()\t" + sMessage);
+}
+
+/****************************************************************************/
+/**
+* logInit() prints the call parameters to the console
+* sFunctionName: The function name
+* aStrValues: Array containg string values (or arrays with string values)
+*   For DzVec3 types DzVec3.x, DzVec3.y and DzVec3.z will be printed
+*/
+function logInit(sFunctionName, aStrValues) {
+	var tmpMsg = false;
+	for (var j=0; j<aStrValues.length; j++) {
+		if (tmpMsg) {
+			tmpMsg = tmpMsg + ", ";
+		} else {
+			tmpMsg = "";
+		}
+		if (Array.isArray(aStrValues[j])) {
+			// expand array with string values
+			tmpMsg = tmpMsg + "[" + aStrValues[j].join(";") + "]";
+		} else {
+			tmpMsg = tmpMsg + aStrValues[j];
+		}
+	}
+	log("DEBUG", sFunctionName, "init(" + tmpMsg + ")");
+}
+
+/***********************************************************************/
+/**
+* getNormalNode_Ctrl(): Returns a node rotated +90° of the current node along ctrlNode
+* nTime: The scene time
+* node: The source node
+* ctrlNode: The rotation control of the node
+*   If node points to 1,0,0 and the ctrlNode is the Z axis then node will point to 0,1,0
+*/
+function getNormalNode_Ctrl(nTime, nodeBone, ctrlNode, bReverse) {
+	var sFunctionName = "getNormalNode_Ctrl";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = nodeBone.getName();
+			aValues[i++] = ctrlNode.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...	
+		var vecPosBone = nodeBone.getWSPos(nTime);
+		var nCurrentMinRotation = ctrlNode.getMin();
+		var nCurrentMaxRotation = ctrlNode.getMax();
+		var nCurrentRotation = ctrlNode.getValue(nTime);
+		var nodeChildBone = getChildNode(nodeBone);
+		
+		var nodeNormal, vecNormal, vecPosChildBone;
+		if (nodeChildBone) {
+			vecPosChildBone = nodeChildBone.getWSPos(nTime);
+			log("DEBUG", sFunctionName, "Bone 0°: " + vecPosBone + " -> " + vecPosChildBone);
+			
+			// make sure that ±90 rotation is possible
+			ctrlNode.setMin(nCurrentRotation - 90);
+			ctrlNode.setMax(nCurrentRotation + 90);
+			ctrlNode.setValue(nTime, nCurrentRotation + 90); // rotating the bone also affects the child bone
+			if (bReverse) {
+				ctrlNode.setValue(nTime, nCurrentRotation - 90); // rotating the bone also affects the child bone
+			}
+			log("DEBUG", sFunctionName, "Bone 90°: " + vecPosBone + " -> " + nodeChildBone.getWSPos(nTime));
+			vecNormal = intGetVector(nTime, nodeBone, getChildNode(nodeBone));
+
+			ctrlNode.setValue(nTime, nCurrentRotation);
+			
+			nodeNormal = intGetNode(nTime, vecNormal);
+			nodeNormal.setWSPos(nTime, vecPosChildBone);
+			log("DEBUG", sFunctionName, "Normal: " + nodeNormal.getWSPos(nTime) + " -> " + nodeNormal.getWSPos(nTime).add(vecNormal));
+			// restore rotation limits
+			ctrlNode.setMin(nCurrentMinRotation); // restore settings
+			ctrlNode.setMax(nCurrentMaxRotation); // restore settings
+		} else {
+			log("WARNING", sFunctionName, "No child bone, guessing end point ...");
+			var strRotation = ctrlNode.getName().substring(0, 1); // X, Y, Z (_Rotate)
+			// replace ctrlNode
+			ctrlNode = getRotation(nodeBone, strRotation);
+			//nCurrentMinRotation = ctrlNode.getMin();
+			//nCurrentMaxRotation = ctrlNode.getMax();
+			nCurrentRotation = ctrlNode.getValue(nTime);
+			var nodeParentBone = nodeBone.getNodeParent();
+			var ctrlParentBone = getRotation(nodeParentBone, strRotation);
+			var nParentCurrentMaxRotation = ctrlParentBone.getMax();
+			var nParentCurrentMinRotation = ctrlParentBone.getMin();
+			var nParentCurrentRotation = ctrlParentBone.getValue(nTime);
+			// make sure that ±90°(±N°) rotation is possible
+			ctrlParentBone.setMin(-270); //nParentCurrentMinRotation - 90); // make sure that -x° rotation is possible
+			ctrlParentBone.setMax(270); //nParentCurrentRotation + nCurrentRotation + 90); // make sure that +90° rotation is possible
+			ctrlParentBone.setValue(nTime, nParentCurrentRotation + nCurrentRotation); // parent points into the same direction as the child
+			var vecChildBone = intGetVector(nTime, nodeParentBone, nodeBone);
+			vecChildBone.setLength(vecChildBone.length() / 2); // child is usually not as long as parent
+			ctrlParentBone.setValue(nTime, nParentCurrentRotation + nCurrentRotation + 90); // parent points in the direction of child+90°
+			if (bReverse) {
+				ctrlParentBone.setValue(nTime, nParentCurrentRotation + nCurrentRotation - 90);
+			}
+			var vecNormal = intGetVector(nTime, nodeParentBone, nodeBone);
+			ctrlParentBone.setValue(nTime, nParentCurrentRotation); // restore rotation of parent		
+			nodeNormal = intGetNode(nTime, vecNormal);
+			nodeNormal.setWSPos(nTime, nodeBone.getWSPos(nTime).add(vecChildBone));
+			log("DEBUG", sFunctionName, "Normal: " + nodeNormal.getWSPos(nTime) + " -> " + nodeNormal.getWSPos(nTime).add(vecNormal));
+			
+			// restore rotation limits
+			ctrlParentBone.setMin(nParentCurrentMinRotation);
+			ctrlParentBone.setMax(nParentCurrentMaxRotation);
+			//ctrlNode.setMin(nCurrentMinRotation);
+			//ctrlNode.setMax(nCurrentMaxRotation);
+		}
+			
+		nodeNormal.setName(nodeBone.getName() + ".normal");
+		return nodeNormal;
+
+		function intGetVector(nTime, nodeOrigin, nodeEnd) {
+			var vecPosNode = nodeOrigin.getWSPos(nTime);
+			var vecPosChildNode = nodeEnd.getWSPos(nTime);
+			var vecNode = vecPosChildNode.subtract(vecPosNode);
+			return vecNode;	
+		}
+		function intGetNode(nTime, vecVector) {
+			var nodeTarget = new DzNode();
+			nodeTarget.setName(sFunctionName + ".target");
+			nodeTarget.setWSPos(nTime, vecVector);
+
+			var nodeNew = getNodeNull(nTime, sFunctionName + ".new");
+			var nodeNewUp = getNodeNull(nTime, sFunctionName + ".new", vec_Null);
+			pointTo(nTime, nodeNew, nodeNewUp, nodeTarget);;
+
+			return nodeNew;	
+		}
+		
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+/***********************************************************************/
+/**
+* getNodeNull(): Returns a new node at (0,0,0) or vecPosition
+* nTime - DzTime value
+* strNodeName - name of the new node
+* vecPosition - position of the new node
+*/
+function getNodeNull(nTime, strNodeName, vecPosition) {
+	var sFunctionName = "getNodeNull"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = strNodeName;
+			aValues[i++] = vecPosition;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var node = new DzNode();
+		node.setName(strNodeName);
+		resetNode(nTime, node, vecPosition);
+		return(node);
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+function resetNode(nTime, node, vecPosition) {
+	var sFunctionName = "resetNode"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = node.getName();
+			aValues[i++] = vecPosition;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		if (!vecPosition) {
+			node.setWSPos(nTime, vec_Origin);			
+		} else {
+			node.setWSPos(nTime, vecPosition);
+		}
+		node.setWSRot(nTime, quat_Null);
+		return true;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getClone: Returns a clone of 'node'.
+* node: The node to be cloned.
+* sCloneName (optional): Desired node name of the clone. (Default: node.getName() + ".clone")
+*/
+function getClone(node, sCloneName) {
+	var sFunctionName = "getClone"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			aValues[i++] = sCloneName;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var strCloneName = (sCloneName) ? sCloneName : node.getName() + ".clone";
+		var oClone = Scene.findNodeByLabel(strCloneName);
+		if (!oClone) {
+			log("DEBUG", sFunctionName, "Creating new clone: " + strCloneName);
+			// Let the user know we're busy
+			setBusyCursor();
+			processEvents();
+
+			oClone = node.getSkeleton().duplicate(false);
+			oClone.setName(strCloneName);
+			oClone.setLabel(strCloneName);
+			
+			processEvents();
+			Scene.addNode(oClone);
+			
+			// Let the user know we're done
+			clearBusyCursor();
+		}
+		return oClone;
+		// ...Code
+	} catch (e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getVector(): Returns a vector pointing in the same direction as the orientation of the node
+* nTime
+* node
+* nrLength: optional parameter to set a length
+*/
+function getVector(nTime, node, nrLength) {
+	var sFunctionName = "getVector"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = node.getName();
+			aValues[i++] = nrLength;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var quat = node.getWSRot(nTime);
+		var vec = quat.multVec(vec_Null);
+		if (nrLength) {
+			vec.setLength(nrLength * vec.length());		
+		}
+		return vec;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* sortNumber(): Helper to sort numbers in an array correctly
+* sortNumberReverse(): Helper to sort numbers in an array correctly
+* Usage:
+*   aNumbers.sort(sortNumber);
+*   aNumbers.sort(sortNumberReverse);
+*/
+function sortNumber(nrA, nrB) {
+	return nrA - nrB;
+}
+function sortNumberReverse(nrA, nrB) {
+	return nrB - nrA
+}
+
+/****************************************************************************/
+/**
+*  pointTo() rotates the root node to the target node.
+*  nTime: 
+*  nodeRoot: root node (eg lShldrBend / rThighBend)
+*  nodeCurrent: root node is pointing to this node when calling
+*  nodeTarget: root node will be pointing to this node afterwards
+*/
+function pointTo(nTime, nodeRoot, nodeCurrent, nodeTarget) {
+	var sFunctionName = "pointTo"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = nodeRoot.getName() + "@" + nodeRoot.getWSPos(nTime);
+			aValues[i++] = nodeCurrent.getName() + "@" + nodeCurrent.getWSPos(nTime);
+			aValues[i++] = nodeTarget.getName() + "@" + nodeTarget.getWSPos(nTime);
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var posRoot = nodeRoot.getWSPos(nTime);
+		var quatRoot = nodeRoot.getWSRot(nTime);
+		
+		var posCurrent = nodeCurrent.getWSPos(nTime);
+		var vecCurrent = posCurrent.subtract(posRoot);
+		
+		var posTarget = nodeTarget.getWSPos(nTime);
+		var vecTarget = posTarget.subtract(posRoot);
+		
+		log("DEBUG", sFunctionName, vecTarget + " --> " + vecCurrent);
+		
+		var quatTo = vecTarget.getRotationTo(vecCurrent);
+		nodeRoot.setWSRot(nTime, quatRoot.multiply(quatTo));
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}	
+
+
+/****************************************************************************/
+/**
+* getChildNode() returns the 1st found DzBone child.
+* node: The parent node
+*/
+function getChildNode(node) {
+	var sFunctionName = "getChildNode"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var nodeChildren = node.getNodeChildren(false);
+		for (var i=0; i<nodeChildren.length; i++) {
+			if (nodeChildren[i].className() == "DzBone") {
+				log("DEBUG", sFunctionName, "Found: " + nodeChildren[i].getName());
+				return nodeChildren[i];
+			}
+		}
+		log("WARN", sFunctionName, "Found: nothing! " + nodeChildren.length);
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+/****************************************************************************/
+/**
+* getRotation() returns the float property for the rotation
+* node: The node itself
+* sRotation: The string 'X', 'Y' or 'Z' to specify the rotation control
+*/
+function getRotation(node, sRotation) {
+	var sFunctionName = "getRotation"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			aValues[i++] = sRotation;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		switch(sRotation) {
+			case "X":
+				return node.getXRotControl();
+			case "Y":
+				return node.getYRotControl();
+			case "Z":
+				return node.getZRotControl();
+		} 
+		log("ERROR", sFunctionName, "No control found.");
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getNormalVector: Returns upright vector
+*/
+function getNormalVector(t, node1, node2) {
+	var sFunctionName = "getNormalVector"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node1.getName();
+			aValues[i++] = node2.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var node1Child = getChildNode(node1);
+		var node2Child = getChildNode(node2);
+		
+		if (node1Child && node2Child) {
+			var vec1 = node1Child.getWSPos(t).subtract(node1.getWSPos(t));
+			var vec2 = node2Child.getWSPos(t).subtract(node2.getWSPos(t));
+			var vecNormal = vec1.cross(vec2);
+			vecNormal.normalize();
+			if (b_isDebug) {
+				log("DEBUG", sFunctionName, "v1=" + vec1 + "; v2=" + vec2 + "; vN=" + vecNormal);
+			}
+			return vecNormal;
+		} else {
+			log("ERROR", sFunctionName, "Node(s) do not contain child nodes. (" + node1.getName() + "/" + node1Child + " | " + node2.getName() + "/" + node2Child + ")");
+			return false;
+		}
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+/****************************************************************************/
+/**
+* getVecDistance() returns the distance between to points.
+* vec1, vec2: A DzVec3 vector.
+* http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/vec3_dz
+*/
+/**
+* getNodeDistance() returns the distance between to nodes.
+* nodeA, nodeB: A DzNode, getWSPos() is applied to get the vector. getVecDistance() is used to get the distance.
+* http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/vec3_dz
+*/
+function getVecDistance(vec1, vec2) {
+	var sFunctionName = "getVecDistance"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = vec1;
+			aValues[i++] = vec2;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var nLength = Math.sqrt( Math.pow(vec2.x - vec1.x, 2) + Math.pow(vec2.y - vec1.y, 2) + Math.pow(vec2.z - vec1.z, 2) );
+		if (b_isDebug) {
+			log("DEBUG", sFunctionName, "v1=" + vec1 + "; v2=" + vec2 + ";vLen=" + nLength.toFixed(2));
+		}
+		return nLength;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+function getNodeDistance(nodeA, nodeB) {
+	var sFunctionName = "getNodeDistance"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nodeA.getName();
+			aValues[i++] = nodeB.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code..
+		return getVecDistance(nodeA.getWSPos(), nodeB.getWSPos());
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+
+/****************************************************************************/
+/**
+* getNodeChildByName() returns the first child node found with the matching name. Returns false if nothing matches.
+* node: The node to start from.
+* aStrNodeNames: Array with node names, at least one should  match.
+*/
+function getNodeChildByName(node, aStrNodeNames) {
+	var sFunctionName = "getNodeChildByName"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			aValues[i++] = aStrNodeNames;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		for( var i = 0; i < aStrNodeNames.length; i++ ) {
+			var n = node.findNodeChild(aStrNodeNames[i], true);
+			if (n) {
+				log("DEBUG", sFunctionName, "Found: " + n.getName());
+				return n;
+			}
+		}
+		log("ERROR", sFunctionName, "Found nothing.");
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+/****************************************************************************/
+/**
+* getNodeParentByName() returns the parent node with the matching name. Returns false if nothing matches.
+* node: The selected / choosen node.
+* aStrParentNames: Array with node names, one must match.
+*/
+function getNodeParentByName(node, aStrParentNames) {
+	var sFunctionName = "getNodeParentByName"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			aValues[i++] = aStrParentNames;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var watchdog = 10;
+		var doBreak = false;
+		var parentNode = node;
+		do {
+			if (!parentNode) {
+				watchdog = 0;
+				break;
+			}
+			var nodeName = parentNode.getName();
+			for( var i = 0; i < aStrParentNames.length; i++ ) {
+				if (nodeName == aStrParentNames[i]) {
+					doBreak = true;
+					break;
+				}
+			}
+			if (doBreak) {
+				break;		
+			}
+			parentNode = parentNode.getNodeParent();
+			watchdog--;
+		} while(watchdog > 0);
+		if (watchdog > 0) {
+			log("DEBUG", sFunctionName, "Found: " + parentNode.getName());
+			return parentNode;
+		}
+		log("DEBUG", sFunctionName, "Found nothing!");
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* Simple Array.contains() function:
+* isStringInArray() returns true if 's' is in the 'aStrings' array.
+* s: A random string
+* aStrings: Array with strings
+*/
+function isStringInArray(s, aStrings) {
+	var sFunctionName = "isStringInArray"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = s;
+			aValues[i++] = aStrings;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		for( var i = 0; i < aStrings.length; i++ ) {
+			if (s == aStrings[i]) {
+				log("DEBUG", sFunctionName, "Found: " + s);
+				return true;
+			}
+		}
+		log("DEBUG", sFunctionName, "No match");
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;	}
+}
+
+
+
+/****************************************************************************/
+/**
+* getNodeNames() returns an array with the names of the nodes
+* aNodes: An array with nodes.
+*/
+function getNodeNames(aNodes) {
+	var sFunctionName = "getNodeNames"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = aNodes.length + "*";
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		var aStrNames = new Array();
+		for (var j=0; j<aNodes.length; j++) {
+			aStrNames.push(aNodes[j].getName());
+		}
+		return aStrNames;
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+/****************************************************************************/
+/**
+* getRootNode() returns the root node of the object
+* node: The selected / choosen node.
+* getDzFigure false or missing: The root node will be returned.
+* getDzFigure true: Return a DzFigure node.
+*/
+function getRootNode(node, returnDzFigure) {
+	var sFunctionName = "getRootNode"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = node.getName();
+			aValues[i++] = returnDzFigure;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		// Code...
+		nr_Tab++;
+		var parentNode = node;
+		if ( !returnDzFigure ) {
+			returnDzFigure = false;
+		}
+		if ( returnDzFigure && (parentNode.className() == "DzFigure") ) {
+			return node;
+		}
+		var watchdog = 100;
+		var tempNode;
+		do {
+			watchdog--;
+			tempNode = parentNode.getNodeParent();
+			if (!tempNode) {
+				break;
+			}
+			parentNode = tempNode;
+			if ( returnDzFigure && (parentNode.className() == "DzFigure") ) {
+				break;
+			}
+
+		} while(watchdog > 0);
+		return parentNode;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getColliderName(): Returns a unique collider name
+* aNodeTargetNodes: Array with nodes the collider will collide with
+* strPrefix: Prefix for the collider, may be empty
+* colliderName: name of the collider
+*/
+function getColliderName(aNodeTargetNodes, strPrefix) {
+	var sFunctionName = "getColliderName";
+	if (!strPrefix) {
+		strPrefix = "";
+	}
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = getNodeNames(aNodeTargetNodes);
+			aValues[i++] = strPrefix;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		// Code...
+		nr_Tab++;
+		var colliderName = strPrefix;
+		var aTargetRootNodes = new Array(); // store all root nodes of aNodeTargetNodes
+		for( var i = 0; i < aNodeTargetNodes.length; i++ ) {
+			aTargetRootNodes[i] = getRootNode(aNodeTargetNodes[i], true);
+		}
+		// make array unique (no duplicate names)
+		var aTargetRootNodes = aTargetRootNodes.filter(function (x, j, a) { 
+			return a.indexOf(x) == j; 
+		});
+		// sort to get always the same collider name
+		aTargetRootNodes.sort();
+		for( var i = 0; i < aTargetRootNodes.length; i++ ) {
+			colliderName = colliderName + aTargetRootNodes[i].getName() + "_";
+		}
+		log("DEBUG", sFunctionName, "Collider name: '" + colliderName + "'");
+		return colliderName;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getCollider(): Returns a collider
+* aNodeTargetNodes: Array with nodes the collider will collide with
+* colliderName: name of the collider
+*/
+function getCollider(aNodeTargetNodes, colliderName) {
+	var sFunctionName = "getCollider"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = getNodeNames(aNodeTargetNodes);
+			aValues[i++] = colliderName;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		// Code...
+		nr_Tab++;
+		var collider = Scene.findNodeByLabel(colliderName);
+		// target list of the collider can not be checked, assume that it is correct
+		if (!collider) {
+			
+			// Let the user know we are busy
+			setBusyCursor();
+			log("DEBUG", sFunctionName + "delCollider(" + colliderName + ")", "init");
+			
+			// store current scene selection
+			var primarySelection = Scene.getPrimarySelection();
+			var aSelectedNodes = Scene.getSelectedNodeList();
+			for (var i = 0; i < aSelectedNodes.length; i++) {
+				print("_off_" + aSelectedNodes[i].getName());
+				aSelectedNodes[i].select(false);
+			}
+			try {		
+				// select the aNodeTargetNodes
+				for (var i = 0; i < aNodeTargetNodes.length; i++) {
+					print("__on_" + aNodeTargetNodes[i].getName());
+					aNodeTargetNodes[i].select(true);
+				}	
+				
+				var aTmpSelectedNodes = Scene.getSelectedNodeList();
+				for (var i = 0; i < aTmpSelectedNodes.length; i++) {
+					print("Collider collides with: " + aTmpSelectedNodes[i].getName() + " (" + getRootNode(aTmpSelectedNodes[i], true).getName() + ")");
+				}		
+				
+				// create the collider
+				collider = new mcjColliderNode();
+				collider.setLabel(colliderName);
+				collider.name = colliderName;
+				Scene.addNode(collider);
+				
+				// un-select the aNodeTargetNodes
+				for (var i = 0; i < aNodeTargetNodes.length; i++) {
+					print("_off_" + aNodeTargetNodes[i].getName());
+					aNodeTargetNodes[i].select(false);
+				}
+			} catch (e) {
+				// should never happen
+				print(e);
+			} finally {
+				// restore the scene selection
+				for (var i = 0; i < aSelectedNodes.length; i++) {
+					print("__on_" + aSelectedNodes[i].getName());
+					aSelectedNodes[i].select(true);
+				}
+				Scene.setPrimarySelection(primarySelection);
+
+				// Let the user know we are done
+				clearBusyCursor();	
+			}
+		}
+		return collider;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+/****************************************************************************/
+/**
+* delCollider(): Deletes a collider
+* strColliderName: name of the collider
+*/
+function delCollider(strColliderName) {
+	var sFunctionName = "delCollider";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = strColliderName;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var collider = Scene.findNodeByLabel(strColliderName);
+		if (collider) {
+			Scene.removeNode(collider);
+			log("DEBUG", sFunctionName, "Collider '" + strColliderName + "' removed.");
+		}
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* removeColliders() removes colliders starting with the supplied name.
+* strPrefix: A string prefix for the colliders to be remeved.
+*/
+function removeColliders(strPrefix) {
+	var sFunctionName = "removeColliders"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = strPrefix;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var aNodeList = Scene.getNodeList() ;
+		var j = strPrefix.length;
+		for (var i = 0; i<aNodeList.length; i++) {
+			try {
+				if (strPrefix == aNodeList[i].getName().substring(0, j)) {
+					delCollider(aNodeList[i].getName());
+				}
+			} catch(e) {}
+		}
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;	}
+}
+
+/****************************************************************************/
+/**
+* showMessage() shows a popup message.
+* s_AppName: global Application Name (not passed as a parameter)
+* sLevel: String, eg DEBUG, INFO, WARN, ERROR, ...
+* sMessage: Message to be displayed
+*/ 
+function showMessage(sLevel, sMessage) {
+	MessageBox.information(sLevel + ": " + sMessage, s_AppName, "&OK" );
+}
+
+/****************************************************************************/
+/**
+* getArrow(): Returns an arrow. All parameters are optional.
+* oArrowDef: Defines the arrow, see arrowDefinition().
+*/
+function getArrow(oArrowDef) {
+	var sFunctionName = "getArrow"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = oArrowDef;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...	
+		if (!oArrowDef) {
+			oArrowDef = new arrowDefinition();
+		}
+		var sName = oArrowDef.name;
+		var arrow = Scene.findNode(sName);
+		if (arrow) {
+			return arrow;
+		}
+		var colArrow = oArrowDef.color;
+		var headLen = oArrowDef.lHead;
+		var headRadius = oArrowDef.rHead;
+		var baseLen = oArrowDef.l;
+		var baseRadius = oArrowDef.r;
+		var arrowLen = headLen + baseLen;
+		var arrowObj = [
+		"v " + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v " + headRadius + " " + baseLen + " " + headRadius + "",
+		"v -" + headRadius + " " + baseLen + " " + headRadius + "",
+		"v -" + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v " + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v 0 " + arrowLen + " 0",
+		"v " + headRadius + " " + baseLen + " " + headRadius + "",
+		"v " + headRadius + " " + baseLen + " " + headRadius + "",
+		"v 0 " + arrowLen + " 0",
+		"v -" + headRadius + " " + baseLen + " " + headRadius + "",
+		"v -" + headRadius + " " + baseLen + " " + headRadius + "",
+		"v 0 " + arrowLen + " 0",
+		"v -" + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v -" + baseRadius + " " + baseLen + " -" + baseRadius + "",
+		"v -" + baseRadius + " 0 -" + baseRadius + "",
+		"v -" + baseRadius + " 0 " + baseRadius + "",
+		"v -" + baseRadius + " " + baseLen + " " + baseRadius + "",
+		"v -" + baseRadius + " " + baseLen + " -" + baseRadius + "",
+		"v " + baseRadius + " " + baseLen + " -" + baseRadius + "",
+		"v " + baseRadius + " 0 -" + baseRadius + "",
+		"v -" + baseRadius + " 0 -" + baseRadius + "",
+		"v " + baseRadius + " " + baseLen + " -" + baseRadius + "",
+		"v " + baseRadius + " " + baseLen + " " + baseRadius + "",
+		"v " + baseRadius + " 0 " + baseRadius + "",
+		"v " + baseRadius + " 0 -" + baseRadius + "",
+		"v -" + baseRadius + " 0 -" + baseRadius + "",
+		"v " + baseRadius + " 0 -" + baseRadius + "",
+		"v " + baseRadius + " 0 " + baseRadius + "",
+		"v -" + baseRadius + " 0 " + baseRadius + "",
+		"v -" + baseRadius + " 0 " + baseRadius + "",
+		"v " + baseRadius + " 0 " + baseRadius + "",
+		"v -" + baseRadius + " " + baseLen + " " + baseRadius + "",
+		"v " + baseRadius + " " + baseLen + " " + baseRadius + "",
+		"v " + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v -" + headRadius + " " + baseLen + " -" + headRadius + "",
+		"v 0 " + arrowLen + " 0",
+		"v 0 0 0",
+		"f 7 5 6",
+		"f 10 8 9",
+		"f 13 11 12",
+		"f 34 35 36",
+		"f 1 2 3 4",
+		"f 17 14 15 16",
+		"f 18 19 20 21",
+		"f 22 23 24 25",
+		"f 26 27 28 29",
+		"f 30 31 33 32" ];
+
+		var tmpdir = App.getTempPath();
+		var tmpFile = tmpdir + "/" + "arrow.obj";
+		var file = new DzFile(tmpFile);
+		file.open(file.WriteOnly);
+		var n = arrowObj.length;
+		for (var i=0; i<n; i++) {
+			file.writeLine(arrowObj[i]);
+		}
+		file.close();
+		arrow = loadObject(tmpFile);
+		arrow.setName(sName);
+		arrow.setLabel(sName);
+		var obj = arrow.getObject();
+		var shp = obj.getCurrentShape();
+		var mat = shp.getMaterial(0);
+		mat.setDiffuseColor(colArrow);
+		return arrow;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* arrowDefinition(): Defines an object to create an arrow. All parameters are optional.
+* sName: Name of the arrow (default: Arrow)
+* colArrow: Color of the arrow (default: Color(255, 255, 255))
+* nrBaseLength: Length of the base (default: 15)
+* nrBaseRadius: Radius* of the base (default: 0.1)
+* nrHeadLength: Length of the arrow head (default: 1)
+* nrHeadRadius: Radius* of the head (default: 1)
+* Radius* is not correct as the arrow base is square
+*
+* Usage:
+*   var oArrowDef = new arrowDefinition("Red Arrow", Color(255, 64, 64));
+*   var oArrow = getArrow(oArrowDef);
+*/
+function arrowDefinition(sName, colArrow, nrBaseLength, nrBaseRadius, nrHeadLength, nrHeadRadius) {
+	var sFunctionName = "arrowDefinition"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sName;
+			aValues[i++] = colArrow;
+			aValues[i++] = colArrow;
+			aValues[i++] = nrBaseLength;
+			aValues[i++] = nrBaseRadius;
+			aValues[i++] = nrHeadLength;
+			aValues[i++] = nrHeadRadius;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		this.name = sName ? sName : "Arrow";
+		this.color = colArrow ? colArrow : Color(255, 255, 255);
+		this.l = nrBaseLength ? nrBaseLength : 15;
+		this.r = nrBaseRadius ? nrBaseRadius : 0.1;
+		this.lHead = nrHeadLength ? nrHeadLength : 1;
+		this.rHead = nrHeadRadius ? nrHeadRadius : 1;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* loadObject(): Loads an OBJ file
+* strFilename: File name of the OBJ file.
+* Source: https://sites.google.com/site/mcasualsdazscripts4/mcjloadmanyobj
+*/
+function loadObject(strFilename) {
+	var sFunctionName = "loadObject"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = strFilename;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var importMgr = App.getImportMgr(); 
+		var importer = importMgr.findImporterByClassName('DzObjImporter'); 
+		var fileIOSettings = new DzFileIOSettings(); 
+		var defaultOptions = importer.getDefaultOptions( fileIOSettings ); 
+		fileIOSettings.setIntValue('RunSilent', 1); 
+		fileIOSettings.setFloatValue('Scale', '1'); 
+		res = importer.readFile(strFilename, fileIOSettings); 
+		var n = Scene.getNumNodes();
+		return Scene.getNode(n - 1);
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* getAbsolutePath(): returns the absolute path of an object.
+* strFilename: The relative path of the filename.
+*/
+function getAbsolutePath(strFilename) {
+	var sFunctionName = "getAbsolutePath"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = strFilename;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		var strContentLocation = "";
+		var i = 0;
+		while (i < App.getContentMgr().getNumContentDirectories()) {
+			strContentLocation = App.getContentMgr().getContentDirectoryPath(i) + strFilename;
+			log("DEBUG", sFunctionName, "Checking: " + strContentLocation);
+			if (new DzFile(strContentLocation).exists()) {
+				log("DEBUG", sFunctionName, "Found: " + strContentLocation);
+				return strContentLocation;
+				break;
+			}
+			i++;
+		}
+		log("ERROR", sFunctionName, "Found nothing!");
+		return false;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+/****************************************************************************/
+/**
+* License for the code above this line:
+* You can use this script freely for personal or commercial use.
+* You may not sell, resell, sub-license or rent this models in any way.
+* Many functions by mCasual/Jacques are used here. Make sure to credit mCasual/Jacques if you use the library.
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+* INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+* PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+* FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+* ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+/****************************************************************************/
+
+
+
+
+/****************************************************************************/
+/**
+* The following code is based on
+* http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/geometry/generate_plane/start
+* License: https://creativecommons.org/licenses/by/3.0/
+* Modifications: sOrigin, parameters, unit only cm, plane size, return value
+*/
+/****************************************************************************/
+/**
+* Parameters:
+* sOrigin: "World Center" or "Object Center"
+* nDiameter: The diameter of the cylinder or sphere.
+* nSize: The height of the cylinder.
+* nSegments / nSides: Number of segments and sides of the cylinder or sphere.
+*
+* sOrigin: "World Center" or "Object Center"
+* nSize: The side length of the plane. The height of the cylinder.
+* nDivisions: Divisions of the plane
+*/
+function addCylinder(sOrigin, nDiameter, nSize, nSegments, nSides) {
+	var sFunctionName = "addCylinder";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nDiameter;
+			aValues[i++] = nSize;
+			aValues[i++] = nSegments;
+			aValues[i++] = nSides;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		// Sanity check the input values
+		if ( nSize <= 0.0 || nDiameter <= 0.0 || nSegments < 1 || nSides < 3 )
+		{
+			// We are done...
+			return;
+		}
+	 
+		// Let the user know we are busy
+		setBusyCursor();
+	 
+		// Create new node
+		var oNode = new DzNode();
+	 
+		// Set the node name;
+		// use a name that is consistent with the create primitive action
+		oNode.setName( "Cylinder" );
+	 
+		// Create a new object
+		var oObject = new DzObject();
+	 
+		// Set the object name;
+		// use a name that is consistent with the create primitive action
+		oObject.name = String( "pCylinder(%1_%2)%3_%4" )
+					.arg( nSize )
+					.arg( nDiameter )
+					.arg( nSides )
+					.arg( nSegments );
+	 
+		// Create a new polygonal shape
+		var oFacetShape = new DzFacetShape();
+	 
+		// Set the shape name and label;
+		// use a name that is consistent with the create primitive action
+		oFacetShape.name = "Default";
+		oFacetShape.setLabel( oFacetShape.name );
+	 
+		// Create a new polygonal mesh
+		var oFacetMesh = new DzFacetMesh();
+	 
+		// Create a new default material
+		var oMaterial = new DzDefaultMaterial();
+	 
+		// Set the material name and label;
+		// use a name that is consistent with the create primitive action
+		oMaterial.name = "Default";
+		oMaterial.setLabel( oMaterial.name );
+	 
+		// Add the material to the shape
+		oFacetShape.addMaterial( oMaterial );
+	 
+		// Begin editing the mesh
+		oFacetMesh.beginEdit();
+	 
+		// Get the UV map
+		var oMap = oFacetMesh.getUVs();
+	 
+		// Activate the material; all new geometry will be added to this
+		oFacetMesh.activateMaterial( oMaterial.name );
+	 
+		// Declare some variables for generating the mesh
+		var i, j, nNext;
+		var x, y, z, nAngle, nSinAngle, nCosAngle;
+		var bAtSeam = false;
+		var vecUVsA = new DzVec3( 0, 0, 0 );
+		var vecUVsB = new DzVec3( 0, 0, 0 );
+	 
+		var nVerts = nSegments + 1;
+		var nRadius = nDiameter / 2;
+	 
+		// Pre-size the vertex array; faster than dynamic resizing
+		oFacetMesh.preSizeVertexArray( nSides * nVerts + 2 );
+	 
+		// Create the center vertex and UV for the bottom
+		oFacetMesh.addVertex( 0.0, 0.0, 0.0 );
+		vecUVsA.x = 0.25;
+		vecUVsA.y = 0.75;
+		oMap.appendPnt2Vec( vecUVsA );
+	 
+		// Create the center vertex and UV for the top
+		oFacetMesh.addVertex( 0.0, nSize, 0.0 );
+		vecUVsA.x = 0.75;
+		//vecUVsA.y = 0.75;
+		oMap.appendPnt2Vec( vecUVsA );
+	 
+		// Create the vertices and UVs for the sides
+		for( i = 0; i < nSides; i += 1 ){
+			nAngle = ((Math.PI * 2) * i) / nSides;
+			nSinAngle = Math.sin( nAngle );
+			nCosAngle = Math.cos( nAngle );
+	 
+			x = nSinAngle * nRadius;
+			z = nCosAngle * nRadius;
+	 
+			// Create an extra UV for the bottom
+			vecUVsA.x = (nSinAngle * 0.25) + 0.25;
+			vecUVsA.y = (nCosAngle * 0.25) + 0.75;
+			oMap.appendPnt2Vec( vecUVsA );
+	 
+			for( j = 0; j < nVerts; j += 1 ){
+				oFacetMesh.addVertex( x, nSize * j / nSegments, z );
+	 
+				vecUVsB.x = i / nSides;
+				vecUVsB.y = (j / (nVerts - 1)) * 0.5;
+				oMap.appendPnt2Vec( vecUVsB );
+			}
+	 
+			// Create an extra UV for the top
+			vecUVsA.x += 0.5;
+			vecUVsA.y = -(vecUVsA.y - 0.75) + 0.75;
+			oMap.appendPnt2Vec( vecUVsA );
+		}
+	 
+		// Create UVs for the seam
+		var nSeam = oMap.getNumValues();
+		vecUVsB.x = 1;
+		for( i = 0; i < nVerts; i += 1 ){
+			vecUVsB.y = (i / (nVerts - 1)) * 0.5;
+			oMap.appendPnt2Vec( vecUVsB );
+		}
+	 
+		// Pre-size the facet array; faster than dynamic resizing
+		oFacetMesh.preSizeFacets( nSides * (nSegments + 2) );
+	 
+		// Create the faces
+		var nUVs = nVerts + 2;
+		var aVertexIndices = new Array( 4 );
+		var aUvIndices = new Array( 4 );
+		for( i = 0; i < nSides; i += 1 ){
+			nNext = i + 1;
+			if( nNext >= nSides ){
+				bAtSeam = true;
+				nNext = 0;
+			}
+	 
+			aVertexIndices[0] = 0;
+			aUvIndices[0] = 0;
+	 
+			aVertexIndices[1] = nNext * nVerts + 2;
+			aUvIndices[1] = nNext * nUVs + 2;
+	 
+			aVertexIndices[2] = i * nVerts + 2;
+			aUvIndices[2] = i * nUVs + 2;
+	 
+			aVertexIndices[3] = -1;
+			aUvIndices[3] = -1;
+	 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+	 
+			for( j = 0; j < nSegments; j += 1 ){
+				aVertexIndices[0] = i * nVerts + 2 + j;
+				aUvIndices[0] = i * nUVs + 3 + j;
+	 
+				aVertexIndices[1] = nNext * nVerts + 2 + j;
+				aUvIndices[1] = bAtSeam ? nSeam + j : ( nNext * nUVs + 3 + j );
+	 
+				aVertexIndices[2] = nNext * nVerts + 3 + j;
+				aUvIndices[2] = bAtSeam ? nSeam + j + 1 : ( nNext * nUVs + 4 + j );
+	 
+				aVertexIndices[3] = i * nVerts + 3 + j;
+				aUvIndices[3] = i * nUVs + 4 + j;
+	 
+				oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+			}
+	 
+			aVertexIndices[0] = 1;
+			aUvIndices[0] = 1;
+	 
+			aVertexIndices[1] = ( i + 1 ) * nVerts + 1;
+			aUvIndices[1] = ( i + 1 ) * nUVs + 1;
+	 
+			aVertexIndices[2] = ( nNext + 1 ) * nVerts + 1;
+			aUvIndices[2] = ( nNext + 1 ) * nUVs + 1;
+	 
+			aVertexIndices[3] = -1;
+			aUvIndices[3] = -1;
+	 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+		}
+	 
+		// Finish editing the mesh
+		oFacetMesh.finishEdit();
+	 
+		// Set the mesh for the shape
+		oFacetShape.setFacetMesh( oFacetMesh );
+	 
+		// Add the shape to the object
+		oObject.addShape( oFacetShape );
+	 
+		// Add the object to the node
+		oNode.setObject( oObject );
+	 
+		// Get the local bounding box
+		var boxLocal = oNode.getLocalBoundingBox();
+		var vecMax = boxLocal.max;
+		var vecMin = boxLocal.min;
+	 
+		// If the user chose the object center for the origin
+		if( sOrigin == "Object Center" ){
+			// Get the middle of the height of the box
+			var nMid = (vecMax.y + vecMin.y) * 0.5;
+	 
+			// Set the origin; default and current
+			var vecOrigin = new DzVec3(0, nMid, 0);
+			oNode.setOrigin( vecOrigin, true );
+			oNode.setOrigin( vecOrigin );
+		}
+	 
+		// If the height of the bounding box is less than
+		// 1 unit (1cm) tall, set it to be 1 unit tall
+		if( vecMax.y < 1 ){
+			vecMax.y = 1;
+		}
+	 
+		// Set the end point; default and current
+		var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+		oNode.setEndPoint( vecEndPoint, true );
+		oNode.setEndPoint( vecEndPoint );
+	 
+		// Get the presentation for the node
+		var oPresentation = oNode.getPresentation();
+	 
+		// If the node did not have a presentation,
+		// create one and assign it to the node
+		if( !oPresentation ){
+			oPresentation = new DzPresentation();
+			oNode.setPresentation( oPresentation );
+		}
+	 
+		// Set the type of node
+		oPresentation.type = "Prop";
+	 
+		// Add the node to the scene
+		Scene.addNode( oNode );
+	 
+		// Let the user know we are done
+		clearBusyCursor();
+		
+		return oNode;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+
+function addSphere(sOrigin, nDiameter, nSegments, nSides) {
+	var sFunctionName = "addSphere";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nDiameter;
+			aValues[i++] = nSegments;
+			aValues[i++] = nSides;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		// Sanity check the input values
+		if ( nDiameter <= 0.0 || nSegments < 1 || nSides < 3 )
+		{
+			// We are done...
+			return;
+		}
+	 
+		// Let the user know we are busy
+		setBusyCursor();
+	 
+		// Create new node
+		var oNode = new DzNode();
+	 
+		// Set the node name;
+		// use a name that is consistent with the create primitive action
+		oNode.setName( "Sphere" );
+	 
+		// Create a new object
+		var oObject = new DzObject();
+	 
+		// Set the object name;
+		// use a name that is consistent with the create primitive action
+		oObject.name = String( "pSphere(%1)%2_%3" )
+					.arg( nDiameter )
+					.arg( nSides )
+					.arg( nSegments );
+	 
+		// Create a new polygonal shape
+		var oFacetShape = new DzFacetShape();
+	 
+		// Set the shape name and label;
+		// use a name that is consistent with the create primitive action
+		oFacetShape.name = "Default";
+		oFacetShape.setLabel( oFacetShape.name );
+	 
+		// Create a new polygonal mesh
+		var oFacetMesh = new DzFacetMesh();
+	 
+		// Create a new default material
+		var oMaterial = new DzDefaultMaterial();
+	 
+		// Set the material name and label;
+		// use a name that is consistent with the create primitive action
+		oMaterial.name = "Default";
+		oMaterial.setLabel( oMaterial.name );
+	 
+		// Add the material to the shape
+		oFacetShape.addMaterial( oMaterial );
+	 
+		// Begin editing the mesh
+		oFacetMesh.beginEdit();
+	 
+		// Get the UV map
+		var oMap = oFacetMesh.getUVs();
+	 
+		// Activate the material; all new geometry will be added to this
+		oFacetMesh.activateMaterial( oMaterial.name );
+	 
+		// Declare some variables for generating the mesh
+		var i, j, nNext;
+		var x, y, z, nAngle, nSinAngle;
+		var bAtSeam = false;
+		var vecUVs = new DzVec3( 0, 0, 0 );
+	 
+		var nVerts = nSegments - 1;
+		var nPoleSegments = nSegments - 2;
+		var nUvOffset = (nSides - 1) * 2;
+		var nHalfSize = nDiameter / 2;
+	 
+		// Pre-size the vertex array; faster than dynamic resizing
+		oFacetMesh.preSizeVertexArray( nSides * nVerts + 2 );
+	 
+		// Create vertices for the poles
+		oFacetMesh.addVertex( 0.0, 0.0, 0.0 );
+		oFacetMesh.addVertex( 0.0, nDiameter, 0.0 );
+	 
+		// Create UVs for the poles
+		var nOffset = 0.5 / nSides;
+		for( i = 0; i < nSides; i += 1 ){
+			vecUVs.x = i / nSides + nOffset;
+			vecUVs.y = 0;
+			oMap.appendPnt2Vec( vecUVs );
+			vecUVs.y = 1;
+			oMap.appendPnt2Vec( vecUVs );
+		}
+	 
+		// Create the vertices and UVs for the sides
+		for( i = 0; i < nSides; i += 1 ){
+			nAngle = ((Math.PI * 2) * i) / nSides;
+			x = Math.sin( nAngle ) * nHalfSize;
+			z = Math.cos( nAngle ) * nHalfSize;
+			vecUVs.x = i / nSides;
+			for( j = 0; j < nVerts; j += 1 ){
+				nAngle = Math.PI * (j + 1) / nSegments;
+				y = -Math.cos( nAngle ) * nHalfSize + nHalfSize;
+				nSinAngle = Math.sin( nAngle );
+				oFacetMesh.addVertex( x * nSinAngle, y, z * nSinAngle );
+				vecUVs.y = (j + 1) / nSegments;
+				oMap.appendPnt2Vec( vecUVs );
+			}
+		}
+	 
+		// Create UVs for the seam
+		var nSeam = oMap.getNumValues();
+		vecUVs.x = 1;
+		for( i = 0; i < nVerts; i += 1 ){
+			vecUVs.y = (i + 1) / nSegments;
+			oMap.appendPnt2Vec( vecUVs );
+		}
+	 
+		// Pre-size the facet array; faster than dynamic resizing
+		oFacetMesh.preSizeFacets( nSides * (nPoleSegments + 2) );
+	 
+		var aVertexIndices = new Array( 4 );
+		var aUvIndices = new Array( 4 );
+	 
+		// Create the faces
+		for( i = 0; i < nSides; i += 1 ){
+			nNext = i + 1;
+			if( nNext >= nSides ){
+				bAtSeam = true;
+				nNext = 0;
+			}
+	 
+			aVertexIndices[0] = 0;
+			aUvIndices[0] = i * 2;
+	 
+			aVertexIndices[1] = nNext * nVerts + 2;
+			aUvIndices[1] = bAtSeam ? nSeam : aVertexIndices[1] + nUvOffset;
+	 
+			aVertexIndices[2] = i * nVerts + 2;
+			aUvIndices[2] = aVertexIndices[2] + nUvOffset;
+	 
+			aVertexIndices[3] = -1;
+			aUvIndices[3] = -1;
+	 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+	 
+			for( j = 0; j < nPoleSegments; j += 1 ){
+				aVertexIndices[0] = i * nVerts + 2 + j;
+				aUvIndices[0] = aVertexIndices[0] + nUvOffset;
+	 
+				aVertexIndices[1] = nNext * nVerts + 2 + j;
+				aUvIndices[1] = bAtSeam ? nSeam + j : aVertexIndices[1] + nUvOffset;
+	 
+				aVertexIndices[2] = nNext * nVerts + 3 + j;
+				aUvIndices[2] = bAtSeam ? nSeam + j + 1 : aVertexIndices[2] + nUvOffset;
+	 
+				aVertexIndices[3] = i * nVerts + 3 + j;
+				aUvIndices[3] = aVertexIndices[3] + nUvOffset;
+	 
+				oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+			}
+	 
+			aVertexIndices[0] = 1;
+			aUvIndices[0] = i * 2 + 1;
+	 
+			aVertexIndices[1] = i * nVerts + nVerts + 1;
+			aUvIndices[1] = aVertexIndices[1] + nUvOffset;
+	 
+			aVertexIndices[2] = nNext * nVerts + nVerts + 1;
+			aUvIndices[2] = bAtSeam ? nSeam + nPoleSegments : aVertexIndices[2] + nUvOffset;
+	 
+			aVertexIndices[3] = -1;
+			aUvIndices[3] = -1;
+	 
+			oFacetMesh.addFacet( aVertexIndices, aUvIndices );
+		}
+	 
+		// Finish editing the mesh
+		oFacetMesh.finishEdit();
+	 
+		// Set the mesh for the shape
+		oFacetShape.setFacetMesh( oFacetMesh );
+	 
+		// Add the shape to the object
+		oObject.addShape( oFacetShape );
+	 
+		// Add the object to the node
+		oNode.setObject( oObject );
+	 
+		// Get the local bounding box
+		var boxLocal = oNode.getLocalBoundingBox();
+		var vecMax = boxLocal.max;
+		var vecMin = boxLocal.min;
+	 
+		// If the user chose the object center for the origin
+		if( sOrigin == "Object Center" ){
+			// Get the middle of the height of the box
+			var nMid = (vecMax.y + vecMin.y) * 0.5;
+	 
+			// Set the origin; default and current
+			var vecOrigin = new DzVec3(0, nMid, 0);
+			oNode.setOrigin( vecOrigin, true );
+			oNode.setOrigin( vecOrigin );
+		}
+	 
+		// If the height of the bounding box is less than
+		// 1 unit (1cm) tall, set it to be 1 unit tall
+		if( vecMax.y < 1 ){
+			vecMax.y = 1;
+		}
+	 
+		// Set the end point; default and current
+		var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+		oNode.setEndPoint( vecEndPoint, true );
+		oNode.setEndPoint( vecEndPoint );
+	 
+		// Get the presentation for the node
+		var oPresentation = oNode.getPresentation();
+	 
+		// If the node did not have a presentation,
+		// create one and assign it to the node
+		if( !oPresentation ){
+			oPresentation = new DzPresentation();
+			oNode.setPresentation( oPresentation );
+		}
+	 
+		// Set the type of node
+		oPresentation.type = "Prop";
+	 
+		// Add the node to the scene
+		Scene.addNode( oNode );
+	 
+		// Let the user know we are done
+		clearBusyCursor();
+		
+		return oNode;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+function addPlane(sOrigin, nSize, nDivisions) {
+	var sFunctionName = "addPlane";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = sOrigin;
+			aValues[i++] = nSize;
+			aValues[i++] = nDivisions;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		// Sanity check the input values
+		if ( nSize <= 0.0 || nDivisions < 1 )
+		{
+			// We are done...
+			return;
+		}
+		
+		// Let the user know we are busy
+		setBusyCursor();
+
+		// Create new node
+		var oNode = new DzNode();
+
+		// Set the node name;
+		// use a name that is consistent with the create primitive action
+		oNode.setName( "Plane" );
+
+		// Create a new object
+		var oObject = new DzObject();
+
+		// Set the object name;
+		// use a name that is consistent with the create primitive action
+		oObject.name = String( "pPlane(%1)%2" ).arg( nSize ).arg( nDivisions );
+
+		// Create a new polygonal shape
+		var oFacetShape = new DzFacetShape();
+
+		// Set the shape name and label;
+		// use a name that is consistent with the create primitive action
+		oFacetShape.name = "Default";
+		oFacetShape.setLabel( oFacetShape.name );
+
+		// Create a new polygonal mesh
+		var oFacetMesh = new DzFacetMesh();
+
+		// Create a new default material
+		var oMaterial = new DzDefaultMaterial();
+
+		// Set the material name and label;
+		// use a name that is consistent with the create primitive action
+		oMaterial.name = "Default";
+		oMaterial.setLabel( oMaterial.name );
+
+		// Add the material to the shape
+		oFacetShape.addMaterial( oMaterial );
+
+		// Begin editing the mesh
+		oFacetMesh.beginEdit();
+
+		// Get the UV map
+		var oMap = oFacetMesh.getUVs();
+
+		// Activate the material; all new geometry will be added to this
+		oFacetMesh.activateMaterial( oMaterial.name );
+
+		// Declare some variables for generating the mesh
+		var i, j, idx, numVerts = nDivisions + 1;
+		var x, z, nHalfSize = nSize / 2;
+		var vecUVs = new DzVec3( 0, 0, 0 );
+
+		// Pre-size the vertex array; faster than dynamic resizing
+		oFacetMesh.preSizeVertexArray( numVerts * numVerts );
+
+		// Create the vertices/uvs
+		for( i = 0; i < numVerts; i += 1 ) {
+			z = i / nDivisions;
+			vecUVs.y = z;
+			for( j = 0; j < numVerts; j += 1 ) {
+				x = j / nDivisions;
+				vecUVs.x = x;
+				oFacetMesh.addVertex( x * nSize - nHalfSize, 0, nHalfSize - z * nSize );
+				oMap.appendPnt2Vec( vecUVs );
+			}
+		}
+
+		// Pre-size the facet array; faster than dynamic resizing
+		oFacetMesh.preSizeFacets( nDivisions * nDivisions );
+
+		var aVertexIndices = new Array( 4 );
+
+		// Create the faces
+		for( i = 0; i < nDivisions; i += 1 ) {
+			for( j = 0; j < nDivisions; j += 1 ) {
+				aVertexIndices[0] = j + (i * numVerts);
+				aVertexIndices[1] = j + (i * numVerts) + 1;
+				aVertexIndices[2] = j + ((i + 1) * numVerts) + 1;
+				aVertexIndices[3] = j + ((i + 1) * numVerts);
+
+				oFacetMesh.addFacet( aVertexIndices, aVertexIndices );
+			}
+		}
+
+		// Finish editing the mesh
+		oFacetMesh.finishEdit();
+
+		// Set the mesh for the shape
+		oFacetShape.setFacetMesh( oFacetMesh );
+
+		// Add the shape to the object
+		oObject.addShape( oFacetShape );
+
+		// Add the object to the node
+		oNode.setObject( oObject );
+
+		// Get the local bounding box
+		var boxLocal = oNode.getLocalBoundingBox();
+		var vecMax = boxLocal.max;
+		var vecMin = boxLocal.min;
+
+		// If the user chose the object center for the origin
+		if( sOrigin == "Object Center" ){
+			// Get the middle of the height of the box
+			var nMid = (vecMax.y + vecMin.y) * 0.5;
+
+			// Set the origin; default and current
+			var vecOrigin = new DzVec3(0, nMid, 0);
+			oNode.setOrigin( vecOrigin, true );
+			oNode.setOrigin( vecOrigin );
+		}
+
+		// If the height of the bounding box is less than
+		// 1 unit (1cm) tall, set it to be 1 unit tall
+		if( vecMax.y < 1 ){
+			vecMax.y = 1;
+		}
+
+		// Set the end point; default and current
+		var vecEndPoint = new DzVec3( 0, vecMax.y, 0 );
+		oNode.setEndPoint( vecEndPoint, true );
+		oNode.setEndPoint( vecEndPoint );
+
+		// Get the presentation for the node
+		var oPresentation = oNode.getPresentation();
+
+		// If the node did not have a presentation,
+		// create one and assign it to the node
+		if( !oPresentation ){
+			oPresentation = new DzPresentation();
+			oNode.setPresentation( oPresentation );
+		}
+
+		// Set the type of node
+		oPresentation.type = "Prop";
+
+		// Add the node to the scene
+		Scene.addNode( oNode );
+
+		// Let the user know we are done
+		clearBusyCursor();
+
+		return oNode;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}

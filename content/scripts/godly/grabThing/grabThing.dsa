@@ -1,0 +1,1634 @@
+// DAZ Studio version 4.10 filetype DAZ Script
+
+//===============================================================================================
+// License
+// You can use this script freely for personal or commercial use.
+// You may not resell, distribute for profit, sub-license or rent this script in any way.
+// Many functions by mCasual/Jacques are used here. Sources:
+// https://sites.google.com/site/mcasualsdazscripts6/mcjautolimb2015
+// https://sites.google.com/site/mcasualsdazscripts2/mcjcolliderds45
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//
+//
+// Used source code from DAZ3D: http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/geometry/generate_plane/start
+// License: https://creativecommons.org/licenses/by/3.0/
+/*
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/global
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/node_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/floatproperty_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/vec3_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/quat_dz
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/object_index/array
+*/
+
+/****************************************************************************/
+/**
+* Global variables needed for the loaded library
+*/
+const s_libraryFile = "godly/zzLib/zzLib.dsa";
+const s_AppName = "grabThing";
+const b_isDebug = true;
+var nr_Tab = 1;
+
+/**
+* Definitions start here
+*/
+// TODO set to true during execution to avoid double clicks
+var b_isProcessing = false;
+
+// TODO DzTime - set to 0 - quite bad!
+var nr_Time = 0;
+
+// strings without number (1-3) and boolean close direction
+// true:  min bend (-30) == closed        && max bend (60) = open/streched
+// false: min bend (-30) == open/streched && max bend = (60) closed
+var a_bendCloseDirection = new Array(
+	"rThumb", true, "rCarpal", false, "rIndex", false, "rMid", false, "rRing", false, "rPinky", false,
+	"lThumb", false, "lCarpal", true, "lIndex", true, "lMid", true, "lRing", true, "lPinky", true,
+	"rMetatarsals", false, "rBigToe", false, "rSmallToe", false,
+	"lMetatarsals", false, "lBigToe", false, "lSmallToe", false
+);
+
+// strTmpColliderPrefix is the prefix for temporary colliders.
+// All temporary colliders will be deleted during startup as saved and re-loaded colliders do not work.
+const strTmpColliderPrefix = "tmpColl-";
+
+const vec_Origin = new DzVec3(0, 0, 0);
+const vec_Null = new DzVec3(0, 1, 0);
+const quat_Null = new DzQuat(0, 0, 0, 1);
+
+// Unique IDs for all body parts. Used for array assignmnts.
+const n_LeftHand = 0; // grab-L & thing-L
+const n_RightHand = 1;
+const n_LeftFoot = 2;
+const n_RightFoot = 3; // step-R & floor-R
+
+// Definition of pairs: 'grab-L' will grab 'thing-L', 'step-R' will step on 'floor-R'
+// The names will be looked up in the scene.
+// 'grab-*' & 'step-*' may be null nodes, their position in the scene does not matter.
+// 'grab-*' & 'step-*' must be a child of aStr_LimbRootNodeNames[N]
+// 'thing-*' and 'floor-*' should be arrows, pointing to the grab / step direction.
+// 
+const aStr_GrabNodeNames = new Array("grab-L", "grab-R", "step-L", "step-R");
+const aStr_ThingNodeNames = new Array("thing-L", "thing-R", "floor-L", "floor-R"); // + thing-*0 .. thing-*9, floor-*0 .. floor-*9
+
+// Arrays to store the arrow nodes and their parent nodes
+var aNode_ThingArrowNode = new Array();
+var aNode_ThingNode = new Array();
+
+// Arrays to store the null nodes and their parent nodes
+var aNode_GrabNullNode = new Array();
+var aNode_GrabNode = new Array();
+
+// grab-*/step-* must be a child of aStr_LimbRootNodeNames[N]
+const aStr_LimbRootNodeNames = new Array("lShldrBend", "rShldrBend", "lThighBend", "rThighBend");
+var aNode_LimbRootNodes = new Array();
+
+// grab-*/step-* must not be a direct child of aStr_LimbStopList[N]
+const aStr_LimbStopList = new Array("lHand", "rHand", "lToe", "rToe");
+
+// set to true when matching grab & thing pairs are found and can be used. Used in the UI to show/hide tabs
+var g_aGrabThingAvailable = new Array(false, false, false, false);
+
+
+// The elbow or knee nodes. "Bend" will bend the arm/leg and thus change the length of the limb
+const aStr_LimbJointNodeNames = new Array("lForearmBend" ,"rForearmBend", "lShin", "rShin");
+const aStr_LimbJointRotationIds = new Array("Y", "Y", "X", "X"); // x=red; y=green; z=blue
+var aObj_LimbJointBendControls = new Array();
+
+// The arm or foot twist nodes. "Twist" will twist the arm/leg.
+const aStr_LimbTwistNodeName = new Array("lForearmTwist" ,"rForearmTwist", "lFoot", "rFoot");
+const aStr_LimbTwistRotationIds = new Array("X", "X", "Z", "Z"); // x=red; y=green; z=blue
+var aObj_LimbTwistControls = new Array();
+
+// Bend the hand/foot up/down to get a better grab position
+const aStr_HFBendNodeNames = new Array("lHand", "rHand", "lFoot", "rFoot");
+const aStr_HFBendRotationIds = new Array("Z", "Z", "X", "X"); // x=red; y=green; z=blue
+var aObj_HFBendControls = new Array();
+
+// The limbs to be used to get the normals of the hand or foot.
+var aNode_LimbNormals = new Array();
+var aStr_LimbNormals = new Array();
+aStr_LimbNormals[n_LeftHand] = new Array("lCarpal4", "lCarpal1");
+aStr_LimbNormals[n_RightHand] = new Array("rCarpal1", "rCarpal4");
+aStr_LimbNormals[n_LeftFoot] = "lShin";
+aStr_LimbNormals[n_RightFoot] = "rShin";
+
+// Finger names to bend from left to right (Finger names without prefix 'r'/'l')
+const tmpFingers0 = new Array("Thumb1", "Thumb2", "Thumb3");
+const tmpFingers1 = new Array("Carpal1", "Index1", "Index2", "Index3");
+const tmpFingers2 = new Array("Carpal2", "Mid1", "Mid2", "Mid3");
+const tmpFingers3 = new Array("Carpal3", "Ring1", "Ring2", "Ring3");
+const tmpFingers4 = new Array("Carpal4", "Pinky1", "Pinky2", "Pinky3");
+const g_aFingerNames = new Array(tmpFingers0, tmpFingers1, tmpFingers2, tmpFingers3, tmpFingers4);
+
+// Toe names to bend from left to right (Toe names without prefix 'r'/'l')
+const tmpToes0 = new Array(false, "BigToe", "BigToe_2");
+const tmpToes1 = new Array("Metatarsals", "SmallToe1", "SmallToe1_2");
+const tmpToes2 = new Array(false, "SmallToe2", "SmallToe2_2");
+const tmpToes3 = new Array(false, "SmallToe3", "SmallToe3_2");
+const tmpToes4 = new Array(false, "SmallToe4", "SmallToe4_2");
+const g_aToeNames = new Array(tmpToes0, tmpToes1, tmpToes2, tmpToes3, tmpToes4);
+
+const tmpTwistHandLNodeNames = new Array("lIndex1", "lMid1", "lRing1", "lPinky1");
+const tmpTwistHandRNodeNames = new Array("rIndex1", "rMid1", "rRing1", "rPinky1");
+const tmpTwistFootLNodeNames = new Array("lBigToe", "lSmallToe1", "lSmallToe2", "lSmallToe4");
+const tmpTwistFootRNodeNames = new Array("rBigToe", "rSmallToe1", "rSmallToe2", "rSmallToe4");
+const aTwistNodeNames = new Array(tmpTwistHandLNodeNames, tmpTwistHandRNodeNames, tmpTwistFootLNodeNames, tmpTwistFootRNodeNames);
+
+var g_aCollisionNodesGrab = new Array();
+var g_aCollisionNodesThing = new Array();
+
+// AimFixDistance: Keep a distance between the grab-N/step-N and thing-N/floor-N mesh while bending and aiming.
+var g_aAimFixDistance = new Array(0, 0, 0, 0);
+var g_wDlgAimFixDistance = new Array();
+
+// LimbGrabScale: Grabbing occurs not at the end (100%) of the bone (rCarpal2) but at 80% (may be 50% for feet)
+//   may be set to 1 to get the end of the bone
+var g_aLimbGrabScale = new Array(0.8, 0.8, 0.8, 0.8);
+var g_wDlgLimbSliderGrabScale = new Array();
+
+// LimbTwistOffset: Additional rotation after calculating the best rotation
+var g_aLimbTwistOffset = new Array(-5, 5, 0, 0);
+var g_wDlgLimbTwistOffset = new Array();
+
+// HandFootBendOffset: Additional bend after calculating the best bend angle
+var g_aHFBendOffset = new Array(0, 0, 0, 0);
+var g_wDlgHFBendOffset = new Array();
+
+var g_aDistanceObject = new Array();
+
+
+
+// DLG vars
+const g_DlgTabNames = new Array("Left Hand", "Right Hand", "Left Foot", "Right Foot");
+var g_bTabEnabled = false;
+var g_wDlgTabs;
+var g_wDlgButtons = new Array(new Array(), new Array(), new Array(), new Array());
+
+/****************************************************************************/
+/* main starts here */
+if (main()) {
+	showDialog();
+}
+try {
+	removeColliders(strTmpColliderPrefix);
+} catch (e) {}
+/* the end */
+/****************************************************************************/
+
+function main() {
+	if (!includeScript(s_libraryFile)) {
+		print("ERROR\tmain\tScript '" + s_libraryFile + "' not found.");
+		return false;
+	}
+	removeColliders(strTmpColliderPrefix);
+
+	for (var i=0; i<4; i++) {
+		aNode_ThingArrowNode[i] = Scene.findNodeByLabel(aStr_ThingNodeNames[i]);
+		aNode_GrabNullNode[i] = Scene.findNodeByLabel(aStr_GrabNodeNames[i]);
+		if (aNode_ThingArrowNode[i] && aNode_GrabNullNode[i]) {	
+			// Process thing-* / floor-*
+			aNode_ThingNode[i] = aNode_ThingArrowNode[i].getNodeParent();
+			if (!aNode_ThingNode[i]) {
+				showMessage("WARNING", "No parent!\n'" + aStr_ThingNodeNames[i] + "' must have a parent.");		
+				continue;
+			}
+			
+			// Process grab-* / step-*
+			aNode_GrabNode[i] = aNode_GrabNullNode[i].getNodeParent();
+			if (!aNode_GrabNode[i]) {
+				showMessage("ERROR", "No parent!\n'" + aStr_GrabNodeNames[i] + "' must have a parent.");
+				return false;
+			}		
+			var strGrabNodeName = aNode_GrabNode[i].getName();
+
+			// TODO - find better place to move nodes
+			var vecPosGrabNode = aNode_GrabNode[i].getWSPos(nr_Time); 
+			aNode_GrabNullNode[i].setWSPos(nr_Time, vecPosGrabNode); // + move to child node / real position
+
+			// grab-* / step-* stoplist
+			if (isStringInArray(strGrabNodeName, aStr_LimbStopList)) {
+				showMessage("ERROR", "Illegal parent!\n'" + aStr_GrabNodeNames[i] + "' must not be a direct child of '" + limbStopList + "'.");		
+				return false;
+			}		
+
+			// Check value of N
+			aNode_LimbRootNodes[i] = getNodeParentByName(aNode_GrabNode[i], new Array(aStr_LimbRootNodeNames[i]));
+			if (!aNode_LimbRootNodes[i]) {
+				var err1 = "";
+				var err2 = "";
+				switch(i) {
+					case 0: err1 = "Left Shoulder";
+							err2 = "left collar";
+							break;
+					case 1: err1 = "Right Shoulder";
+							err2 = "right collar";
+							break;
+					case 2: err1 = "Left Thigh";
+							err2 = "(left) pelvis";
+							break;
+					case 3: err1 = "Right Thigh";
+							err2 = "(right) pelvis";
+							break;
+				}
+				showMessage("ERROR", err1 + " not found!\n'" + aStr_GrabNodeNames[i] + "' must be the child of " + err2 + ".\nCurrent position: " + strGrabNodeName + "'.");
+				return false;
+			}
+			
+			// no error so far - no error expected below
+			g_aGrabThingAvailable[i] = true;	
+
+			// fill aNode_LimbNormals(aNode_LimbRootNodes, aStr_LimbNormals)
+			var oStrTmp = aStr_LimbNormals[i];
+			var oNodeTmp;
+			if (Array.isArray(oStrTmp)) {
+				oNodeTmp = new Array();
+				for (var j=0; j<oStrTmp.length; j++) {
+					oNodeTmp[j] = getNodeChildByName(aNode_LimbRootNodes[i], new Array(oStrTmp[j]));
+				}
+			} else {
+				oNodeTmp = getNodeChildByName(aNode_LimbRootNodes[i], new Array(oStrTmp));
+			}
+			aNode_LimbNormals[i] = oNodeTmp;
+
+			// get initial node distance
+			g_aDistanceObject[i] = getNodeDistance(aNode_LimbRootNodes[i], aNode_ThingArrowNode[i]);
+			
+			// 'aStr_LimbJointNodeNames' and 'Array(aStr_LimbJointNodeNames[i])' are arrays; 'aStr_LimbJointNodeNames[i]' is only 1 element
+			var nodelimbJoint = getNodeChildByName(aNode_LimbRootNodes[i], new Array(aStr_LimbJointNodeNames[i]));
+			aObj_LimbJointBendControls[i] = getRotation(nodelimbJoint, aStr_LimbJointRotationIds[i]);
+	
+			var nodeLimbTwist = getNodeChildByName(aNode_LimbRootNodes[i], new Array(aStr_LimbTwistNodeName[i]));
+			aObj_LimbTwistControls[i] = getRotation(nodeLimbTwist, aStr_LimbTwistRotationIds[i]);
+
+			var nodeHF = getNodeChildByName(aNode_LimbRootNodes[i], new Array(aStr_HFBendNodeNames[i]));
+			aObj_HFBendControls[i] = getRotation(nodeHF, aStr_HFBendRotationIds[i]);
+
+		
+			// Scan for additional collision nodes
+			var aTmpCollisionNodesThing = new Array(getRootNode(aNode_ThingArrowNode[i], true));
+			for (var j=0; j<10; j++) {
+				var tmpThing = Scene.findNodeByLabel(aStr_ThingNodeNames[i] + j);
+				if (tmpThing) {
+					aTmpCollisionNodesThing.push(getRootNode(tmpThing, true));
+				}
+			}	
+			// make array unique
+			aTmpCollisionNodesThing = aTmpCollisionNodesThing.filter(function (x, j, a) { 
+				return a.indexOf(x) == j; 
+			});
+			// If thing==grab then replace "thing" with "clone"
+			var strGrabRootNodeName = getRootNode(aNode_GrabNode[i], true).getName(); // usually G3M/G3F/...
+			for (var j=0; j<aTmpCollisionNodesThing.length; j++) {
+				if (strGrabRootNodeName == aTmpCollisionNodesThing[j].getName()) {
+					//showMessage("INFO", "Cloning " + strGrabRootNodeName + " will take some seconds.");
+					aTmpCollisionNodesThing[j] = getClone(aTmpCollisionNodesThing[j]);
+				}
+			}
+			g_aCollisionNodesThing[i] = aTmpCollisionNodesThing;
+	
+			// Only one grab node
+			var aTmpCollisionNodesGrab = new Array(getRootNode(aNode_GrabNullNode[i], true));
+			g_aCollisionNodesGrab[i] = aTmpCollisionNodesGrab;				
+				
+		}
+	}
+	return true;
+}	
+
+
+function showDialog() {
+	
+	// Create a new dialog
+	var wDlg = new DzDialog;
+	wDlg.caption = s_AppName;
+	
+	// Create a layout for the dialog
+	var wLyt = new DzVBoxLayout(wDlg);
+	wLyt.autoAdd = true;
+	wLyt.margin = 5;
+	wLyt.spacing = 5;
+
+	wDlgBtnsGB = new DzVGroupBox( wDlg );
+	wDlgBtnsGB.columns = 2;
+
+
+	wBtnBendLimb = new DzPushButton(wDlgBtnsGB);
+	wBtnBendLimb.text = "Bend Limb";
+	wBtnBendLimb.clicked.connect(bendLimbAction);
+
+	wBtnAimLimb = new DzPushButton(wDlgBtnsGB);
+	wBtnAimLimb.text = "Aim Limb";
+	wBtnAimLimb.clicked.connect(aimLimbAction);
+
+	wTwistLimb = new DzPushButton(wDlgBtnsGB);
+	wTwistLimb.text = "Twist Hand/Foot";
+	wTwistLimb.clicked.connect(twistHandFootAction);
+
+	wBendHandFoot = new DzPushButton(wDlgBtnsGB);
+	wBendHandFoot.text = "Bend Hand/Foot";
+	wBendHandFoot.clicked.connect(bendHFAction);
+
+	/*
+	wSideHandFoot = new DzPushButton(wDlgBtnsGB);
+	wSideHandFoot.text = "- Side-Side Hand/Foot";
+	wSideHandFoot.clicked.connect(sideHandFootAction);
+*/
+
+	wGrabThing = new DzPushButton(wDlgBtnsGB);
+	wGrabThing.text = "Grab (Bend Fingers/Toes)";
+	wGrabThing.clicked.connect(grabThingAction);
+	
+	wCancelBtn = new DzPushButton(wDlgBtnsGB);
+	wCancelBtn.text = "Exit";
+	wDlg.setRejectButton( wCancelBtn );
+
+	var wGrpBox = new Array();
+	g_wDlgTabs = new DzTabWidget(wDlg);
+	g_bTabEnabled = false;
+	for (var i=0; i<4; i++) {
+		wGrpBox[i] = new DzVGroupBox(wDlg);
+		wGrpBox[i].columns = 1;
+		g_wDlgTabs.addTab( wGrpBox[i], g_DlgTabNames[i]);
+		if (!g_aGrabThingAvailable[i]) {
+			g_wDlgTabs.setTabEnabled(i, false);
+		} else {
+			if (!g_bTabEnabled) {
+				g_bTabEnabled = true;
+				g_wDlgTabs.currentIndex = i;
+			}
+		}
+	}
+	if (!g_bTabEnabled) {
+		log("WARN", "showDialog()", "No grab-thing pairs found!");
+		new DzLabel(wDlg).text = "<b>ERROR: No grab-thing pairs found!</b>";
+	}
+
+	for (var i=0; i<4; i++) {
+		if (g_aGrabThingAvailable[i]) {
+			
+			var text = "<b>Info: '" + getRootNode(aNode_GrabNode[i], true).getLabel() + "/" + aNode_GrabNode[i].getLabel() + "' grabbing '" + getRootNode(aNode_ThingArrowNode[i], true).getLabel() + "/" + aNode_ThingArrowNode[i].getNodeParent().getLabel() + "'</b>";
+			new DzLabel(wGrpBox[i]).text = text;
+		
+			var wSliders = new DzVGroupBox(wGrpBox[i]);
+			wSliders.columns = 2;
+			
+			g_wDlgLimbSliderGrabScale[i] = new DzFloatSlider(wSliders);
+			g_wDlgLimbSliderGrabScale[i].label = "Grab node scale (1=100%)";
+			g_wDlgLimbSliderGrabScale[i].labelVisible = true;
+			g_wDlgLimbSliderGrabScale[i].clamped = true;
+			g_wDlgLimbSliderGrabScale[i].min = 0.5;
+			g_wDlgLimbSliderGrabScale[i].value = g_aLimbGrabScale[i];
+			g_wDlgLimbSliderGrabScale[i].max = 1.5;
+			g_wDlgLimbSliderGrabScale[i].sensitivity = 0.1;
+
+			g_wDlgAimFixDistance[i] = new DzFloatSlider(wSliders);
+			g_wDlgAimFixDistance[i].label = "Aim distance offset";
+			g_wDlgAimFixDistance[i].labelVisible = true;
+			g_wDlgAimFixDistance[i].clamped = true;
+			g_wDlgAimFixDistance[i].min = -2;
+			g_wDlgAimFixDistance[i].value = g_aAimFixDistance[i];
+			g_wDlgAimFixDistance[i].max = 10;
+			g_wDlgAimFixDistance[i].sensitivity = 0.5;
+
+			g_wDlgLimbTwistOffset[i] = new DzFloatSlider(wSliders);
+			g_wDlgLimbTwistOffset[i].label = "Twist offset";
+			g_wDlgLimbTwistOffset[i].labelVisible = true;
+			g_wDlgLimbTwistOffset[i].clamped = true;
+			g_wDlgLimbTwistOffset[i].min = -50;
+			g_wDlgLimbTwistOffset[i].value = g_aLimbTwistOffset[i];
+			g_wDlgLimbTwistOffset[i].max = 50;
+			g_wDlgLimbTwistOffset[i].sensitivity = 5;
+
+			g_wDlgHFBendOffset[i] = new DzFloatSlider(wSliders);
+			g_wDlgHFBendOffset[i].label = "Bend offset";
+			g_wDlgHFBendOffset[i].labelVisible = true;
+			g_wDlgHFBendOffset[i].clamped = true;
+			g_wDlgHFBendOffset[i].min = -20;
+			g_wDlgHFBendOffset[i].value = g_aHFBendOffset[i];
+			g_wDlgHFBendOffset[i].max = 20;
+			g_wDlgHFBendOffset[i].sensitivity = 2;
+			
+		//	var tmpButtons = g_wDlgButtons[i];
+			if (i<2) {
+				g_wDlgTabs[i] = addDlgCheckBoxSelection(wGrpBox[i], "Finger Bend Selection", g_wDlgButtons[i], g_aFingerNames, 4);
+			} else {
+				g_wDlgTabs[i] = addDlgCheckBoxSelection(wGrpBox[i], "Toe Bend Selection", g_wDlgButtons[i], g_aToeNames, 4);
+			}
+		}
+		
+	}	
+	
+	// Launch the dialog
+	wDlg.exec();
+}
+
+
+/**
+* addDlgRadioSelection() adds radio buttons to the dialog, returns the radio buttons.
+*   The 1st enabled check box is selected.
+*/
+function addDlgRadioSelection(wDlg, title, aButtons, aButtonTitles, nColumns) {
+	var nColumns = 4;
+	var wBtnGrp = new DzVButtonGroup(wDlg);
+	wBtnGrp.title = title;
+	wBtnGrp.columns = nColumns;
+	var bBtnChecked = false;
+	for (var j=0; j<nColumns; j++) {
+		aButtons[j] = new DzRadioButton(wBtnGrp);
+		if (!g_aGrabThingAvailable[j]) {
+			aButtons[i].text = "";
+			aButtons[j].enabled = false;
+			aButtons[j].checked = false; // default
+		} else {
+			aButtons[j].text = aButtonTitles[j];
+			aButtons[j].enabled = true; // default
+			if (!bBtnChecked) {
+				bBtnChecked = true;
+				aButtons[j].checked = true;
+			}
+		}
+	}
+	return wBtnGrp;
+}
+
+/**
+* addDlgCheckBoxSelection() adds checkboxes to the dialog, returns the check boxes.
+*   All check boxes are selected.
+* wDlg: The dialog
+* title: Title for the check boxes
+* aButtons: Reference to the created buttons
+* aaButtonTitles: Array which contains arrays with the chekbox names (eg: new Array(new Array("A", "B", "C"), new Array("a", "b")))
+*   For each inner array a new line will be created.
+* nColumns: Number of columns, should be equal or larger than the biggest innner array. If the inner array (eg: Array("A", "B")) is larger than nColumns then only nColumns columns will be displayed.
+*   For shorter inner arrays empty and disabled checkboxes are created.
+*/
+function addDlgCheckBoxSelection(wDlg, title, aButtons, aaButtonTitles, nColumns) {
+	var wBtnGrp = new DzVButtonGroup(wDlg);
+	wBtnGrp.title = title;
+	wBtnGrp.columns = nColumns;
+	var i = 0;
+	for (var j=0; j<aaButtonTitles.length; j++) {
+		var aButtonTitles = aaButtonTitles[j];
+		for (var k=0; k<nColumns; k++) {	
+			aButtons[i] = new DzCheckBox(wBtnGrp);
+			if (aButtonTitles[k]) {
+				aButtons[i].text = aButtonTitles[k];
+				aButtons[i].enabled = true; // default
+				aButtons[i].checked = true;
+			} else {
+				aButtons[i].text = "";
+				aButtons[i].enabled = false;
+			}
+			i++;
+		}
+	}
+	return wBtnGrp;
+}
+
+
+function updateDlgToValues() {
+	log("DEBUG", "updateDlgToValues()", "init");
+	var i = g_wDlgTabs.currentIndex;
+	if (g_wDlgLimbSliderGrabScale[i]) {
+		g_aLimbGrabScale[i] = g_wDlgLimbSliderGrabScale[i].value;
+	}
+	if (g_wDlgAimFixDistance[i]) {
+		g_aAimFixDistance[i] = g_wDlgAimFixDistance[i].value;
+	}
+	if (g_wDlgLimbTwistOffset[i]) {
+		g_aLimbTwistOffset[i] = g_wDlgLimbTwistOffset[i].value;
+	}
+	if (g_wDlgHFBendOffset[i]) {
+		g_aHFBendOffset[i] = g_wDlgHFBendOffset[i].value;
+	}
+
+	log("DEBUG", "updateDlgToValues()", "rv: " + i);
+	return i;
+}
+
+/***********************************************************************/
+/**
+* getNormalNode(): Returns a node rotated +90° of the current node along rotNode
+* nTime: The scene time
+* node: The source node
+* ctrlNode: The rotation control of the node
+*   If node points to 1,0,0 and the rotNode is the Z axis then node will point to 0,1,0
+*
+*   Function description (imagine 2D space):
+*   node will be rotated -5° and +5°.
+*   The resulting vectors vecNode1 and vecNode2 will point a little bit down/up from the vector of the node 
+*   vecNode1 will be negated, -5° gets 175°
+*   The angle between vecNode1 and vecNode2 is 175°-5°=170° || 3D: quatVec1toVec2
+*   The initial angle + angle/2 (5°+170°/2=90°) will be the angle for the normal vector. || 3D: slerp(quatNull, quatVec1toVec2, 1/2) returns 1/2 of quatVec1toVec2
+*   3D: The transformation is applied to nodeNormal
+*/
+function getNormalNode(nTime, node, ctrlNode) {
+	var sFunctionName = "getNormalNode_v2";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = node.getName();
+			aValues[i++] = ctrlNode.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+
+	var quatNode = node.getWSRot(nTime);
+	
+	var nCurrentRotation = ctrlNode.getValue(nTime);
+	ctrlNode.setValue(nTime, nCurrentRotation - 5);	
+	var vecNode1 = getVector(nTime, node);
+	
+	ctrlNode.setValue(nTime, nCurrentRotation + 5);
+	var vecNode2 = getVector(nTime, node);
+	var quatNode2 = node.getWSRot(nTime);
+	
+	ctrlNode.setValue(nTime, nCurrentRotation);
+	
+	vecNode1.negate();
+	var quatVec1toVec2 = vecNode1.getRotationTo(vecNode2);
+	var quatFix = quatVec1toVec2.slerp(quat_Null, quatVec1toVec2, 0.5);
+
+	var nodeNormal = new DzNode();
+	nodeNormal.setWSRot(nTime, quatNode.multiply(quatFix));
+	return nodeNormal;
+}
+
+/**
+* getNormalVectorLimb(): Returns a normal vector
+* Usages:
+*   var vec = getNormalVectorLimb(nr_Time, new Array("lCarpal4", "lCarpal1");
+*   var vec = getNormalVectorLimb(nr_Time, new Array("rCarpal1", "rCarpal4");
+*   var vec = getNormalVectorLimb(nr_Time, "lShin");
+*   var vec = getNormalVectorLimb(nr_Time, "rShin");
+*/
+function getNormalVectorLimb(nr_Time, oNode) {
+	var vecNormal;
+	if ( Array.isArray(oNode) && (oNode.length == 2) ) {
+		vecNormal = getNormalVector(nr_Time, oNode[0], oNode[1]);
+	} else {
+		vecNormal = getVector(nr_Time, oNode); // error = rot(_Feet) + rot(_Metatasarls)
+	}
+	//vecNormal.normalize();
+	return vecNormal;
+}
+
+function getNormalVectorI(nr_Time, i) {
+	log("DEBUG", "getNormalVectorI", i);
+	var vecNormal;
+	if (i<2) {
+		var node1 = getNodeChildByName(aNode_LimbRootNodes[i], new Array("lCarpal4", "rCarpal1"));
+		var node2 = getNodeChildByName(aNode_LimbRootNodes[i], new Array("lCarpal1", "rCarpal4"));
+		vecNormal = getNormalVector(nr_Time, node1, node2);
+	} else {
+		var node = getNodeChildByName(aNode_LimbRootNodes[i], new Array("lShin", "rShin"));
+		vecNormal = getVector(nr_Time, node); // error = bend(_Feet) + bend(_Metatasarls)
+	}
+	//vecNormal.normalize();
+	return vecNormal;
+}
+function bendLimbAction() {
+	log("DEBUG", "bendLimbAction()", "init");
+	if (!g_bTabEnabled) {
+		return;
+	}
+	var i = updateDlgToValues();
+
+	var vecNorm = getNormalVectorI(nr_Time, i);
+	var nodeCollision = getCollisionPosition(nr_Time, getChildNode(aNode_GrabNode[i]), vecNorm, g_aCollisionNodesGrab[i], aNode_ThingArrowNode[i], g_aCollisionNodesThing[i], g_aAimFixDistance[i]); // global aNode_Collision
+	nodeCollision.setName("collision-" + i);
+	
+	g_aDistanceObject[i] = getNodeDistance(aNode_LimbRootNodes[i], nodeCollision);
+	bendLimb(nr_Time, aNode_LimbRootNodes[i], aNode_GrabNode[i], aObj_LimbJointBendControls[i], g_aLimbGrabScale[i], g_aAimFixDistance[i], g_aDistanceObject[i]);
+}
+
+function aimLimbAction() {
+	log("DEBUG", "aimLimbAction()", "init");
+	if (!g_bTabEnabled) {
+		return;
+	}
+	var i = updateDlgToValues();
+	
+	var vecNorm = getNormalVectorI(nr_Time, i);
+	var nodeCollision = getCollisionPosition(nr_Time, getChildNode(aNode_GrabNode[i]), vecNorm, g_aCollisionNodesGrab[i], aNode_ThingArrowNode[i], g_aCollisionNodesThing[i], g_aAimFixDistance[i]); // global aNode_Collision
+	nodeCollision.setName("collision-" + i);
+		
+	aimLimb_v2(nr_Time, aNode_LimbRootNodes[i], aNode_GrabNode[i], g_aLimbGrabScale[i], nodeCollision);
+}
+
+function twistHandFootAction() {
+	log("DEBUG", "twistHandFootAction()", "init");
+	if (!g_bTabEnabled) {
+		return;
+	}
+	var i = updateDlgToValues();
+	
+	twistHandFoot(nr_Time, aObj_LimbTwistControls[i], aNode_ThingArrowNode[i], aNode_LimbNormals[i], g_wDlgLimbTwistOffset[i].value);
+}
+
+function bendHFAction() {
+	log("DEBUG", "bendHFAction()", "init");
+	if (!g_bTabEnabled) {
+		return;
+	}
+	var i = updateDlgToValues();
+	
+	twistHandFoot(nr_Time, aObj_HFBendControls[i], aNode_ThingArrowNode[i], aNode_LimbNormals[i], g_wDlgHFBendOffset[i].value);
+}
+
+function grabThingAction() {
+	log("DEBUG", "grabThingAction", "init");
+	if (!g_bTabEnabled) {
+		return;
+	}
+	var i = updateDlgToValues();
+
+	var selectedNodeNames = g_wDlgButtons[i];
+	// get all needed nodes(node names)
+	var bIsFingers;
+	var nFingerCount;
+	if (i<2) {
+		bIsFingers = true;
+		nFingerCount = g_aFingerNames.length;
+	} else {
+		bIsFingers = false;
+		nFingerCount = g_aToeNames.length;
+	}	
+
+	grabThing(nr_Time, aNode_LimbRootNodes[i], g_wDlgButtons[i], nFingerCount, bIsFingers, g_aCollisionNodesGrab[i], g_aCollisionNodesThing[i], aNode_ThingArrowNode[i]);
+}
+
+//#####################################################################
+
+// Grab functions
+
+/****************************************************************************/
+/**
+* grabThing(): Closes the fingers or toes around the object as far as possible.
+* Bend is set to the minimum and then increased until the object is touched.
+* Finger and toe tip are not processed * TODO: get proper end node position & length
+* fingerCount: The number of fingers / toes, usually 5
+* isFingers: true = fingers, false = toes
+*/
+// function twistHandFoot(nr_Time, limbRootNode, bendControl, aTwistSrcNodeNames, aCollisionNodeGrab, aCollisionNodesThing, oThing) {
+	// bendControl X / Z
+	// round 1: bend carpals
+	// round 2: bend all finger bones ... all together ... outer first
+function grabThing(nr_Time, limbRootNode, aGrabNodeNames, fingerCount, isFingers, aCollisionNodeGrab, aCollisionNodesThing, oThing) {
+	var sFunctionName = "grabThing"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nr_Time;
+			aValues[i++] = limbRootNode.getName();
+			//aValues[i++] = __v2__.length + "*";
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}	
+	
+	// get the nodes & rot controls
+	var strNodeDisabled = "!";
+	var grabNodes = new Array();
+	var bendControl = new Array();
+	var aBendDirection = new Array();
+	var minBend = new Array();
+	var maxBend = new Array();
+	
+	var sLeftRight = limbRootNode.getName().substring(0, 1); // l, r (_ShoulderBend / _ThightBend)
+	for (var j=0; j<aGrabNodeNames.length; j++) {
+		var sNodeName = aGrabNodeNames[j];
+		if (sNodeName.enabled) {
+			if (sNodeName.checked) {
+				grabNodes[j] = getNodeChildByName(limbRootNode, new Array(sLeftRight + sNodeName.text));
+
+				var k = a_bendCloseDirection.indexOf(grabNodes[j].getName().replace(/[_0-9]*$/, ""));
+				// if (k == -1) { ... } // TODO fixme
+				aBendDirection[j] = a_bendCloseDirection[k + 1];
+				log("DEBUG", "grabThing()", "bendCloseDirection: " + grabNodes[j].getName() + " " + a_bendCloseDirection[k] + " " + a_bendCloseDirection[k + 1]);
+				if (isFingers) {
+					if (grabNodes[j].getName().search("Thumb") != -1) {
+						// Thumb
+						bendControl[j] = getRotation(grabNodes[j], "Y"); // x=red; y=green; z=blue
+					} else {
+						// Finger
+						bendControl[j] = getRotation(grabNodes[j], "Z"); // x=red; y=green; z=blue	
+					}
+				} else {
+					// Toe
+					bendControl[j] = getRotation(grabNodes[j], "X"); // x=red; y=green; z=blue
+				}
+				minBend[j] = bendControl[j].getMin();
+				maxBend[j] = bendControl[j].getMax();
+			} else {
+				grabNodes[j] = strNodeDisabled;
+			}
+		}  else {
+			// disabled / missing node; false is default (but not for the last elements, new array may get shorter without explicit assignment)
+			grabNodes[j] = false;
+		} 
+		log("DEBUG", "grabThing()", "Grab node (" + sNodeName.enabled + "): [" + sNodeName.checked + "]" + sNodeName.text);	
+	}
+
+	// bend carpal/metatarsals
+	var fingerBoneCount = grabNodes.length / fingerCount; // fingers / toes
+	for (var j=0; j<fingerCount; j++) {
+		var grabNode;
+		var ctrlBend;
+		var aNodeFingers = new Array();
+		// skip last 2 / all finger bones
+		for (var k=0; k<1; k++) {
+			if (k==0) {
+				grabNode = grabNodes[k + j*fingerBoneCount];
+				ctrlBend = bendControl[k + j*fingerBoneCount];
+				bBendDirection = aBendDirection[k + j*fingerBoneCount];
+			}
+			if ( grabNodes[k + j*fingerBoneCount] && (grabNodes[k + j*fingerBoneCount] != strNodeDisabled) ) { 
+				aNodeFingers.push(grabNodes[k + j*fingerBoneCount]); //////////////////////// ?
+			}
+
+		}
+		if ( (!grabNode) || (grabNode == strNodeDisabled) ) {
+			continue;
+		}
+		
+		bendOpenClose(nr_Time, aNodeFingers, ctrlBend, aCollisionNodeGrab, aCollisionNodesThing, bBendDirection);
+	}
+
+	// bend 1st finger bone
+	var fingerBoneCount = grabNodes.length / fingerCount; // fingers / toes
+	for (var j=0; j<fingerCount; j++) {
+		var grabNode;
+		var ctrlBend;
+		var bBendDirection;
+		var aNodeFingers = new Array();
+		for (var k=1; k<fingerBoneCount; k++) {
+			if (k==1) {
+				grabNode = grabNodes[k + j*fingerBoneCount];
+				ctrlBend = bendControl[k + j*fingerBoneCount];
+				bBendDirection = aBendDirection[k + j*fingerBoneCount];
+			}
+			if ( (grabNodes[k + j*fingerBoneCount]) && grabNodes[k + j*fingerBoneCount] != strNodeDisabled ) {
+				aNodeFingers.push(grabNodes[k + j*fingerBoneCount]); //////////////////////// ?
+			}
+
+		}
+		if ( (!grabNode) || (grabNode == strNodeDisabled) ) {
+			continue;
+		}
+		bendOpenClose(nr_Time, aNodeFingers, ctrlBend, aCollisionNodeGrab, aCollisionNodesThing, bBendDirection);
+	}
+
+	// bend 2nd finger bone
+	var fingerBoneCount = grabNodes.length / fingerCount; // fingers / toes
+	for (var j=0; j<fingerCount; j++) {
+		var grabNode;
+		var ctrlBend;
+		var aNodeFingers = new Array();
+		for (var k=2; k<fingerBoneCount; k++) {
+			if (k==2) {
+				grabNode = grabNodes[k + j*fingerBoneCount];
+				ctrlBend = bendControl[k + j*fingerBoneCount];
+				bBendDirection = aBendDirection[k + j*fingerBoneCount];
+			}
+			if ( (grabNodes[k + j*fingerBoneCount]) && grabNodes[k + j*fingerBoneCount] != strNodeDisabled ) {
+				aNodeFingers.push(grabNodes[k + j*fingerBoneCount]); //////////////////////// ?
+			}
+		}
+		if ( (!grabNode) || (grabNode == strNodeDisabled) ) {
+			continue;
+		}
+		if ((!aNodeFingers) || (aNodeFingers.length < 2)) {
+			continue;
+		}
+		bendOpenClose(nr_Time, aNodeFingers, ctrlBend, aCollisionNodeGrab, aCollisionNodesThing, bBendDirection);
+	}
+
+	// bend 3nd finger bone
+	var fingerBoneCount = grabNodes.length / fingerCount; // fingers / toes
+	for (var j=0; j<fingerCount; j++) {
+		var grabNode;
+		var ctrlBend;
+		var aNodeFingers = new Array();
+		for (var k=3; k<fingerBoneCount; k++) {
+			if (k==3) {
+				grabNode = grabNodes[k + j*fingerBoneCount];
+				ctrlBend = bendControl[k + j*fingerBoneCount];
+				bBendDirection = aBendDirection[k + j*fingerBoneCount];
+			}
+			if ( (grabNodes[k + j*fingerBoneCount]) && grabNodes[k + j*fingerBoneCount] != strNodeDisabled ) {
+				aNodeFingers.push(grabNodes[k + j*fingerBoneCount]);
+			} // else add empty node ???
+		}
+		if ( (!grabNode) || (grabNode == strNodeDisabled) ) {
+			continue;
+		}
+		if ((!aNodeFingers) || (aNodeFingers.length < 1)) {
+			continue;
+		}
+		bendOpenClose(nr_Time, aNodeFingers, ctrlBend, aCollisionNodeGrab, aCollisionNodesThing, bBendDirection);
+	}
+	return;
+}
+
+/**
+*
+* bReverse defines the "direction" to close the hand / finger. The right and left hand have inverse settings, also fingers and thumbs have inverse settings.
+* bReverse: false: min bend (-30) == open / streched fingers, max bend (90) == closed hand
+* bReverse: true: min bend (30) == open / streched fingers, max bend (-90) == closed hand
+*/
+function bendOpenClose(nTime, aNodesFinger, bendControl, aNodeSourceCollisionNodes, aNodeDestCollisionNodes, bReverse) {
+	var sFunctionName = "bendOpenClose";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = getNodeNames(aNodesFinger);
+			aValues[i++] = bendControl.getName();
+			aValues[i++] = getNodeNames(aNodeSourceCollisionNodes);
+			aValues[i++] = getNodeNames(aNodeDestCollisionNodes);
+			aValues[i++] = bReverse;			
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code
+		var nrMinBend = bendControl.getMin();
+		var nrMaxBend = bendControl.getMax();
+		var nrDeltaBend = (nrMaxBend - nrMinBend) / 10;
+		if (bReverse) {
+			nrDeltaBend = -nrDeltaBend;
+			nrMinBend = bendControl.getMax();
+			nrMaxBend = bendControl.getMin();
+		}
+		
+		log("DEBUG", sFunctionName, "Bend: " + nrMinBend + " -> ... <- " + nrMaxBend + "; Delta: " + nrDeltaBend);
+		for (var i=nrMinBend; i=i+nrDeltaBend; i<=nrMaxBend) {
+			if (!isCollision(i)) {
+				nrMinBend = i;
+			} else {
+				nrMaxBend = i;
+				break;
+			}
+			if (!bReverse) {
+				if (i > nrMaxBend) {
+					break;
+				}
+			} else {	
+				if (i < nrMaxBend) {
+					break;
+				}
+			}
+		}
+		log("DEBUG", sFunctionName, "Bend: " + nrMinBend + " -> ... <- " + nrMaxBend + "; Delta: " + nrDeltaBend);
+		
+		
+		if (isCollision(nrMinBend)) {
+			log("WARN", sFunctionName, "Collision even with minBend " + nrMinBend + "° applied");
+			// TODO WARN 1 time - collision even with minBend
+			return false;
+		}
+		if (!isCollision(nrMaxBend)) {
+			log("WARN", sFunctionName, "No collision even with maxBend " + nrMaxBend + "° applied");
+			// TODO WARN 1 time - no collision even with maxBend
+			return false;
+		}
+		
+		
+		var detailBend = 0.3; // detail: 0.1°
+		var watchdog = 100;
+		var nrMidBend;
+		var bMid;
+		while (watchdog > 0) {
+			watchdog--;
+			
+			nrMidBend = (nrMaxBend + nrMinBend)/2;
+			bMid = isCollision(nrMidBend);
+			log("DEBUG", sFunctionName, "Bend: " + nrMinBend + " -> "+ nrMidBend +" <- " + nrMaxBend + "; Collision: " + bMid);
+			if (bMid) {
+				// Collision
+				nrMaxBend = nrMidBend;	
+			} else {
+				// No collision
+				nrMinBend = nrMidBend;
+			}
+			
+			// exit condition
+			if ((nrMaxBend - nrMinBend) <= detailBend) {
+				break;
+			}
+		}
+		return true;
+		// Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+	
+	function isCollision(nrBendValue) {
+		var nrDigInto = 0.3;
+		log("DEBUG", "isCollision", "init(" + nrBendValue + ")");
+		var bIsCollision = false;
+		bendControl.setValue(nTime, nrBendValue);
+		// process all collisions
+		for (var i=0; i<aNodesFinger.length; i++) {
+			var nodeNormalFinger = getNormalNode_Ctrl(nTime, aNodesFinger[i], bendControl, bReverse);
+			var vecNormalFinger = getVector(nTime, nodeNormalFinger);
+			var nodeNormalFingerTarget = new DzNode();
+			nodeNormalFingerTarget.setName(nodeNormalFinger.getName() + "-target");
+			nodeNormalFingerTarget.setWSPos(nodeNormalFinger.getWSPos().add(vecNormalFinger));
+			
+			var objCollider = getMeshDistances(nTime, nodeNormalFinger, nodeNormalFingerTarget, aNodeSourceCollisionNodes, aNodeDestCollisionNodes);
+			var aaNrDistances = getFirstDistances(objCollider, aNodeSourceCollisionNodes, aNodeDestCollisionNodes, false, nrDigInto);
+			var aDistSource = aaNrDistances[0];
+			var aDistDest = aaNrDistances[1];
+			var nrDistSrc = aDistSource[0];
+			var nrDistDst = aDistDest[0];
+			/*
+			if ( aDistSource[0] && aDistDest[0] && ( aDistSource[0] >= aDistDest[0]) ) {
+				bIsCollision = true;
+				break;
+			}*/			
+			aaNrDistances = getFirstDistances(objCollider, aNodeSourceCollisionNodes, aNodeDestCollisionNodes, true, nrDigInto);
+			aDistSource = aaNrDistances[0];
+			aDistDest = aaNrDistances[1];
+			var nrDistSrcNeg = aDistSource[0];
+			var nrDistDstNeg = aDistDest[0];// - nrDigInto;
+
+			if (nrDistSrc && nrDistDst) {
+				if (nrDistDst <= nrDistSrc) {
+					bIsCollision = true;
+					break;
+				}
+				if (nrDistDstNeg && (nrDistDstNeg > 0) && (nrDistDstNeg <= nrDistSrc)) {
+					bIsCollision = true;
+					break;
+				}
+			}
+			if (nrDistSrcNeg && nrDistDstNeg) {
+				if (nrDistDstNeg >= nrDistSrcNeg) {
+					bIsCollision = true;
+					break;
+				}
+				if (nrDistDst && (nrDistDst < 0) && (nrDistDst >= nrDistSrcNeg)) {
+					bIsCollision = true;
+					break;
+				}
+				
+			}
+			
+		}	
+		log("DEBUG", "isCollision", "exit(" + bIsCollision + ")");
+		return bIsCollision;
+	}	
+}
+
+
+
+
+/****************************************************************************/
+function twistHandFoot(nTime, bendControl, oThing, aNodeLimbNormals, nCustomOffset) {
+	var sFunctionName = "twistHandFoot";
+	if (b_isDebug) {
+		var varValue = new Array();
+		var i = 0;
+		try {
+			varValue[i++] = nTime;
+			varValue[i++] = bendControl.getName();
+			varValue[i++] = oThing.getName();
+			varValue[i++] = "?";
+			logInit(sFunctionName, varValue);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	// get thing-N / floor-N vector
+	var vecDest = getVector(nTime, oThing);
+	vecDest.negate(); // reverse direction
+
+	var detailBend = 0.6; // detail: 0.2°
+	var minBend = bendControl.getMin();
+	var maxBend = bendControl.getMax();
+	var diffBend = maxBend - minBend;
+	if (diffBend > 170) {
+		showMessage("WARNING", "Twist angle > 170°. Please fix it.");
+	} else if (diffBend == 0) {
+		showMessage("ERROR", "Twist angle = 0°. Please fix it.");
+		return false;
+	}
+
+	try {
+		nr_Tab++;
+		
+		var vecNorm;
+		var watchdog = 50;
+		var nrMin = getVecSum(minBend);
+		var nrMax = getVecSum(maxBend);
+		while (watchdog > 0) {
+			watchdog--;
+
+			log("DEBUG", sFunctionName, "watchdog=" + watchdog + "; min-max bend:" + minBend.toFixed(1) + " .. " + maxBend.toFixed(1) + "; min/max delta-dist:" + nrMin.toFixed(1) + " .. " + nrMax.toFixed(1));
+			
+			// decrease maxBend or increase minBend
+			if (nrMin < nrMax) {
+				maxBend = maxBend - Math.abs(diffBend/3);
+				nrMax = getVecSum(maxBend);
+			} else {
+				minBend = minBend + Math.abs(diffBend/3);
+				nrMin = getVecSum(minBend);
+			}
+
+			// exit condition
+			if ((maxBend - minBend) <= detailBend) {
+				break;
+			}
+			// reduce diffBend
+			diffBend = maxBend - minBend;
+			if (diffBend < detailBend) {
+				diffBend = detailBend;
+			}
+		}
+		getVecSum(maxBend + nCustomOffset);
+		return true;
+		
+		function getVecSum(bendValue) {
+			bendControl.setValue(nTime, bendValue);
+			vecNorm = getNormalVectorLimb(nTime, aNodeLimbNormals);
+			vecNorm = vecDest.subtract(vecNorm);
+			return (Math.abs(vecNorm.x) + Math.abs(vecNorm.y) + Math.abs(vecNorm.z));
+		}
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* aimLimb: Rotate the limb.
+* nTime
+* nodeLimbRoot, nodeLimbGrab: start and end point of the limb. nodeLimbRoot will be rotated. The end of nodeLimbGrab will be at the same position as nodeCollision
+* limbGrabScale: Scale down/up nodeLimbGrab. Grab may occur before the end of the bone.
+* nodeCollision: Node where the collision will occur.
+*/
+function aimLimb_v2(nTime, nodeLimbRoot, nodeLimbGrab, limbGrabScale, nodeCollision) {
+	var sFunctionName = "aimLimb_v2"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = nodeLimbRoot.getName();
+			aValues[i++] = nodeLimbGrab.getName();
+			aValues[i++] = limbGrabScale.toFixed(2)
+			aValues[i++] = nodeCollision.getName();
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName + "()", "init");
+			print(e);
+			throw(e);
+		}
+	}
+	// Scale down the selected node. Useful if _Carpal2 or _SmallToe2 were selected
+	// The proper location to grab is at 80% length of _Carpal2
+	var scaleControl = nodeLimbGrab.getScaleControl();
+	var currentScale = scaleControl.getValue();
+	var nodeLimbGrabScaled = getChildNode(nodeLimbGrab);
+	try {
+		nr_Tab++;
+		if ( nodeLimbGrabScaled && (limbGrabScale != 1) ) {
+			scaleControl.setValue(currentScale * limbGrabScale);
+		} else {
+			nodeLimbGrabScaled = limbEndNode;
+		}
+		pointTo(nTime, nodeLimbRoot, nodeLimbGrabScaled, nodeCollision);
+		return true;
+	} catch(e) {
+		log("ERROR", sFunctionName, e);
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+		// restore the carpal/toe length
+		scaleControl.setValue(currentScale);
+	}
+}
+function delayCollider() {
+	processEvents();
+}
+/**
+* getFirstDistances() returns an array consisting of two arrays (src & dst) with the sorted destinations.
+* objCollider: The collider.
+* aNodeSourceCollisionNodes: Collision nodes (source)
+* aNodeDestCollisionNodes: Collision nodes (dest)
+* aaNodes: Array with two array (for coll1 and coll2)
+* bReverse: Return reverse/negative insted of positive distances/hit points
+* nrDigInto: TODO
+* For aColliders[0] and [1] the smallest positive distance is returned.
+*/
+function getFirstDistances(objCollider, aNodeSourceCollisionNodes, aNodeDestCollisionNodes, bReverse, nrDigInto) {
+	var sFunctionName = "getFirstDistances"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = objCollider.getName();
+			aValues[i++] = getNodeNames(aNodeSourceCollisionNodes);
+			aValues[i++] = getNodeNames(aNodeDestCollisionNodes);
+			aValues[i++] = bReverse;
+			aValues[i++] = nrDigInto;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code
+		if (!nrDigInto) {
+			nrDigInto = 0;
+		}
+		var aDistancesSource = new Array();
+		var aDistancesDest = new Array();
+		
+		for (var k = 0; k < objCollider.getNumHits(); k++) {
+			var tmpDistance = objCollider.getHitsZ(k); // .fixed(6) ==> String
+			var tmpNodeName = objCollider.getHitsNode(k).getName();
+			if (isStringInArray(tmpNodeName, getNodeNames(aNodeSourceCollisionNodes))) {
+				if (!bReverse) {
+					if (tmpDistance < 0) {
+						// skip reverse hit points 
+						continue;
+					}
+				} else {
+					if (tmpDistance > 0) {
+						// skip positive hit points 
+						continue;
+					}
+				}
+					aDistancesSource.push(tmpDistance);
+			} else if (isStringInArray(tmpNodeName, getNodeNames(aNodeDestCollisionNodes))) {
+				tmpDistance = tmpDistance + nrDigInto;
+				if (!bReverse) {
+					if (tmpDistance < 0) {
+						// skip reverse hit points 
+						continue;
+					}
+				} else {
+					if (tmpDistance > 0) {
+						// skip positive hit points 
+						continue;
+					}
+				}
+				aDistancesDest.push(tmpDistance);
+			} else {
+				log("WARN", sFunctionName, "Unexpected collision with: " + tmpNodeName);
+			}
+		}
+		if (!bReverse) {
+			if (aDistancesSource) { aDistancesSource.sort(sortNumber); }
+			if (aDistancesDest) { aDistancesDest.sort(sortNumber); }
+		} else {
+			if (aDistancesSource) { aDistancesSource.sort(sortNumberReverse); }
+			if (aDistancesDest) { aDistancesDest.sort(sortNumberReverse); }
+		}
+		log("DEBUG", sFunctionName, "exit Returning: " + aDistancesSource + " & " + aDistancesDest);
+		return new Array(aDistancesSource, aDistancesDest);
+		// Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/**
+* getMeshDistances() returns a collider
+* nTime
+* nodeSource: Collider starts here
+* nodeDestination: Collider points in this direction
+* aNodeSourceCollisionNodes & aNodeDestCollisionNodes: Collider collides with these objects
+*/
+function getMeshDistances(nr_Time, nodeSource, nodeDestination, aNodeSourceCollisionNodes, aNodeDestCollisionNodes) {
+	var sFunctionName = "getMeshDistances";
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			aValues[0] = nr_Time;
+			aValues[1] = nodeSource.getName();
+			aValues[2] = nodeDestination.getName();
+			aValues[3] = getNodeNames(aNodeSourceCollisionNodes);
+			aValues[4] = getNodeNames(aNodeDestCollisionNodes);
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName + "()", "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Make sure that the colliders points upwards
+		var tmpNode;
+		
+		
+		var aNodesCollider = new Array();
+		for (var i=0; i<aNodeSourceCollisionNodes.length; i++) {
+			var tmpNode = aNodeSourceCollisionNodes.shift();
+			aNodeSourceCollisionNodes.push(tmpNode);
+			aNodesCollider.push(tmpNode);
+		}
+		for (var i=0; i<aNodeDestCollisionNodes.length; i++) {
+			var tmpNode = aNodeDestCollisionNodes.shift();
+			aNodeDestCollisionNodes.push(tmpNode);
+			aNodesCollider.push(tmpNode);
+		}
+
+		// temporary node, just above the collider
+		tmpNode = new DzNode();
+		tmpNode.setName("tmpMeshDistances");
+		var vecCol  = new DzVec3(0, 1, 0);
+		tmpNode.setWSPos(nodeSource.getWSPos().add(vecCol));
+		tmpNode.setWSRot(quat_Null);
+		// quat for this vector
+		var quatCol = new DzQuat(0, 0, 0, 1);
+
+		var strColliderName = getColliderName(aNodesCollider, strTmpColliderPrefix);
+		var objCollider = getCollider(aNodesCollider, strColliderName);
+		objCollider.setWSPos(nodeSource.getWSPos());
+		objCollider.setWSRot(quat_Null);
+		pointTo(nr_Time, objCollider, tmpNode, nodeDestination);
+
+		delayCollider();
+		objCollider.activated();
+		if (b_isDebug) {
+			for (var k = 0; k < objCollider.getNumHits(); k++) {
+				var tmpDistance = objCollider.getHitsZ(k).toFixed(2);
+				log("DEBUG", sFunctionName, "Distances (" + k + "): " + tmpDistance + " " + objCollider.getHitsNode(k).getName());
+			}
+			log("DEBUG", sFunctionName, "exit");
+		}
+
+		return objCollider;
+		// Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}		
+
+
+
+/**
+* getCollisionPosition: Returns a node at the position where the hand/foot node should be placed
+*
+*
+*/
+function getCollisionPosition(nr_Time, nodeSource, vecSource, aSourceCollisionNodes, nodeDest, aDestCollisionNodes, nrAimOffset) {
+	var sFunctionName = "getCollisionPosition";
+	if (b_isDebug) {
+		try {
+			var i = 0;
+			var aValues = new Array();
+			aValues[i++] = nr_Time;
+			aValues[i++] = nodeSource.getName();
+			aValues[i++] = vecSource;
+			aValues[i++] = getNodeNames(aSourceCollisionNodes);
+			aValues[i++] = nodeDest.getName();
+			aValues[i++] = getNodeNames(aDestCollisionNodes);
+			aValues[i++] = nrAimOffset;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init ");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// collider from nodeSource with same direction as vSource
+		// get 1st collision with nodeSource mesh
+		var tmpNode = new DzNode();
+		tmpNode.setName("tmpCollisionPosition1");
+		tmpNode.setWSPos(nodeSource.getWSPos().add(vecSource));
+
+		/*
+		var aColliders = getMeshDistances(nr_Time, nodeSource, tmpNode, aSourceCollisionNodes, aDestCollisionNodes);
+		var aDistances = getDistances(aColliders[0], aSourceCollisionNodes);
+		var nDistance = aDistances[0];
+		*/
+		var objCollider = getMeshDistances(nr_Time, nodeSource, tmpNode, aSourceCollisionNodes, aDestCollisionNodes);
+		var aaNrDistances = getFirstDistances(objCollider, aSourceCollisionNodes, aDestCollisionNodes);
+		var aNrDistSource = aaNrDistances[0];
+		var aNrDistDest = aaNrDistances[1];
+		var nDistance = aNrDistSource[0];
+
+		// collider from nodeDest with same direction as vecDest
+		// get last collision with dDest mesh
+		tmpNode = new DzNode();
+		tmpNode.setName("tmpCollisionPosition2");
+		var vecDest = getVector(nr_Time, nodeDest);
+		tmpNode.setWSPos(nodeDest.getWSPos().add(vecDest));
+
+		objCollider = getMeshDistances(nr_Time, nodeDest, tmpNode, aSourceCollisionNodes, aDestCollisionNodes);
+		aaNrDistances = getFirstDistances(objCollider, aSourceCollisionNodes, aDestCollisionNodes);
+		aNrDistSource = aaNrDistances[0];
+		aNrDistDest = aaNrDistances[1];
+		nDistance = nDistance + aNrDistDest[aNrDistDest.length-1];
+		
+		// create a new vector with length nDistance
+		vecDest.setLength(nDistance + nrAimOffset);
+		
+		// rotate the vector into 
+		tmpNode = new DzNode();
+		tmpNode.setWSPos(nodeDest.getWSPos().add(vecDest));
+
+		return tmpNode;
+	} catch(e) {
+		log("ERROR", sFunctionName, "");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/**
+* bendLimb: Bend the limb.
+* nr_Time
+* nodeLimbRoot, nodeLimbGrab: start and end point of the limb to measure the length
+* bendControl: Elbow / Knee joint
+* nGrabScaleNode: nodeLimbGrab will be scaled down (or up) a little as grabbing in the hand (carpal) occurs not at the end but at 80%
+* nAimDistance: Modify distanceObject manually if needed.
+* distanceObject: Distance between nodeLimbRoot and thing/step center (ignoring meshes, usually calculated value)
+*/
+function bendLimb(nTime, nodeLimbRoot, nodeLimbGrab, bendControl, nGrabScaleNode, nAimDistance, distanceObject) {
+	var sFunctionName = "bendLimb"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = nodeLimbRoot.getName();
+			aValues[i++] = nodeLimbGrab.getName();
+			aValues[i++] = bendControl.getName();
+			aValues[i++] = nGrabScaleNode.toFixed(2);
+			aValues[i++] = nAimDistance.toFixed(2);
+			aValues[i++] = distanceObject.toFixed(2);		
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+
+		// Scale down the selected node. Useful if _Carpal2 or _SmallToe2 were selected
+		// The proper location to grab is at 80% length of _Carpal2
+		var scaleControl = nodeLimbGrab.getScaleControl();
+		var currentScale = scaleControl.getValue();
+		var tmpNodeLimb = getChildNode(nodeLimbGrab);
+		if ( tmpNodeLimb && (nGrabScaleNode != 1) ) {
+			scaleControl.setValue(currentScale * nGrabScaleNode);
+		} else {
+			tmpNodeLimb = nodeLimbGrab;
+		}
+		setLimbLen(nTime, nodeLimbRoot, tmpNodeLimb, bendControl, distanceObject + nAimDistance);
+	} catch(e) {
+		log("ERROR", sFunctionName, "");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+		// restore the carpal/toe length
+		scaleControl.setValue(currentScale);
+	}
+}
+
+/**
+* setLimbLen() adjust the bend angle of a limb so the limb length matches 'nLength'
+* nTime
+* nodeLimbRoot, nodeLimbGrab: start and end point of the limb to measure the length
+* bendControl: the _RotControl element to adjust (Elbow / Knee)
+* nLength: the desired length
+*/
+function setLimbLen(nTime, nodeLimbRoot, nodeLimbGrab, bendControl, nLength) {
+	var sFunctionName = "setLimbLen"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = nodeLimbRoot.getName();
+			aValues[i++] = nodeLimbGrab.getName();
+			aValues[i++] = bendControl.getName();
+			aValues[i++] = nLength.toFixed(2);
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+
+		var minBend = bendControl.getMin();
+		var maxBend = bendControl.getMax();
+		var diffBend = maxBend - minBend;
+		if (diffBend > 200) {
+			showMessage("WARNING", "Bend angle > 200°. Please fix it.");
+		} else if (diffBend == 0) {
+			showMessage("ERROR", "Bend angle == 0°. Please fix it.");
+		}
+		var errMinBend;
+		var errMaxBend;
+		var watchdog = 50;
+		while (watchdog > 0) {
+			watchdog--;
+			
+			bendControl.setValue(nTime, minBend);
+			errMinBend = Math.abs(getNodeDistance(nodeLimbRoot, nodeLimbGrab) - nLength);
+			bendControl.setValue(nTime, maxBend);
+			errMaxBend = Math.abs(getNodeDistance(nodeLimbRoot, nodeLimbGrab) - nLength);
+			
+			log("DEBUG", sFunctionName, "watchdog=" + watchdog + "; min-max bend:" + minBend.toFixed(1) + " .. " + maxBend.toFixed(1) + "; min/max error:" + errMinBend.toFixed(1) + " .. " + errMaxBend.toFixed(1));
+			if (errMinBend < errMaxBend) {
+				maxBend = maxBend - Math.abs(diffBend/5);
+			} else {
+				minBend = minBend + Math.abs(diffBend/5);
+			}
+			if (maxBend < minBend) {
+				if ((errMinBend + errMaxBend) > 1) {
+					log("WARN", sFunctionName, "Final distance: " + (errMinBend + errMaxBend)/2);
+				}
+				break;
+			}
+			diffBend = maxBend - minBend;
+			if (diffBend < 0.6) {
+				diffBend = 0.6;
+			}
+		}
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+
+/****************************************************************************/
+/* stretchHand
+var selectedNode = Scene.getPrimarySelection();
+var childNodes = selectedNode.getNodeChildren(true);
+var strBendControl;
+var selectedNodeName = selectedNode.getName().substring(1,5);
+if (selectedNodeName == "Hand") {
+	strBendControl = "Z";
+} else if (selectedNodeName == "Foot") {
+	strBendControl = "X";
+} else {
+	print(selectedNodeName);
+	return;
+}
+for (var i=0; i<childNodes.length; i++) {
+	var node = childNodes[i];
+	var nodeName = node.getName().substring(1,6);
+	if (nodeName == "Heel") {
+		continue;
+	}
+	print( node.getName() + "  " + nodeName);
+	var ctrlBend = getRotation(node, strBendControl);
+	var nrBendStreched = ctrlBend.getMin();
+	if (nodeName == "Thumb") {
+		ctrlBend = getRotation(node, "Y");
+		nrBendStreched = ctrlBend.getMax();
+	}
+	ctrlBend.setValue(nrBendStreched);
+}
+
+*/
+
+
+/****************************************************************************/
+/**
+* function() template
+*/
+/*
+function __NEW__(nTime, __v1__, __v2__, __v3__) {
+	var sFunctionName = "__NEW__"; 
+	if (b_isDebug) {
+		try {
+			var aValues = new Array();
+			var i = 0;
+			aValues[i++] = nTime;
+			aValues[i++] = __v1__.getName();
+			aValues[i++] = __v2__.length + "*";
+			aValues[i++] = __v3__;
+			logInit(sFunctionName, aValues);
+		} catch(e) {
+			log("ERROR", sFunctionName, "init");
+			print(e);
+			throw(e);
+		}
+	}
+	try {
+		nr_Tab++;
+		// Code...
+		
+		return true;
+		// ...Code
+	} catch(e) {
+		log("ERROR", sFunctionName, "exit");
+		print(e);
+		throw(e);
+	} finally {
+		nr_Tab--;
+	}
+}
+*/
+
+/****************************************************************************/
+/**
+* includeScript() includes a script.
+* strScriptName: The script name.
+* aStrParameters: Skip or set to false to include the script. Setting this parameter to an array of strings ["a=1", "b=2"] will execute the script with these parameters.
+*/
+function includeScript(strScriptName, aStrParameters) {
+	var sFunctionName = "includeScript"; 	
+	if (b_isDebug) {
+		print("DEBUG\nr_Time" + sFunctionName + "\tinit(" + strScriptName + ", " + aStrParameters + ")");
+	}
+	var strScriptNamePath = "";
+	var i = 0;
+	while (i < App.getContentMgr().getNumContentDirectories()) {
+		strScriptNamePath = App.getContentMgr().getContentDirectoryPath(i) + "/scripts/" + strScriptName;
+		if (new DzFile(strScriptNamePath).exists()) {
+			break;
+		}
+		i++;
+		strScriptNamePath = "";
+	}
+	if (strScriptNamePath != "") {
+		if (!aStrParameters) {
+			include(strScriptNamePath);
+			return true;
+		}
+		var oScript = new DzScript(strScriptNamePath);
+		if (oScript.loadFromFile(strScriptNamePath, true)) {
+			var rv = oScript.execute(aStrParameters);
+			// use getArguments() in the script to read the parameters
+			// http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/remote_operation/sub_script/start#example_callee
+			return rv;
+		} else {
+			if (b_isDebug) {
+				print("DEBUG\nr_Time" + sFunctionName + "\tFound script at '" + strScriptNamePath + "' but could not execute it.");
+			}
+			return false;
+		}
+	}
+	print("ERROR\nr_Time" + sFunctionName + "\tScript '" + strScriptName + "' not found.");
+	return false;		
+}

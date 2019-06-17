@@ -1,0 +1,8 @@
+// Let the user know we're busy
+setBusyCursor();
+
+// let the UI update itself
+processEvents();
+
+// Let the user know we're done
+clearBusyCursor();

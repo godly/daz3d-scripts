@@ -1,0 +1,9 @@
+// Clone the primary selection. Cloning a character will take some time.
+
+var node = Scene.getPrimarySelection();
+var strCloneName = node.getName() + ".clone";
+
+oClone = node.getSkeleton().duplicate(false);
+oClone.setName(strCloneName);
+oClone.setLabel(strCloneName);
+Scene.addNode(oClone);

@@ -22,11 +22,10 @@
 /**
 * Global variables needed for the loaded library
 */
-var s_AppName = "mcjHatsAreTheFashionOfTheDay";
-var nr_Tab = 1;
-var b_isDebug = true;
-
 const libraryFile = "godly/zzLib/zzLib.dsa";
+const s_AppName = "mcjHatsAreTheFashionOfTheDay";
+const b_isDebug = true;
+var nr_Tab = 1;
 
 // Hair, character and head nodes needed for further processing
 var nodeHair, nodeCharacter, nodeHead;
@@ -43,7 +42,7 @@ const helpMsg =  " Usage:\n- Make sure that the character is not parented to any
 function main() {
 	
 	if (!includeScript(libraryFile)) {
-		print("ERROR\tmain\tScript '" + strScriptName + "' not found.");
+		print("ERROR\tmain\tScript '" + libraryFile + "' not found.");
 		return false;
 	}
 	
@@ -135,7 +134,7 @@ function includeScript(strScriptName, aStrParameters) {
 			return rv;
 		} else {
 			if (b_isDebug) {
-				print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "'but could not execute it.");
+				print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "' but could not execute it.");
 			}
 			return false;
 		}
