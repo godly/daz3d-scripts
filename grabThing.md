@@ -1,7 +1,7 @@
 # grabThing Beta
 grabThing is still in a beta state. It is partly useable while it still has a lot of issues.
 
-Usage: [grabThing Help](http://htmlpreview.github.io/?https://github.com/godly/daz3d-scripts/raw/master/content/documentation/godly/grabThing.html).
+Usage: [grabThing Help](http://htmlpreview.github.io/?https://raw.githubusercontent.com/godly/daz3d-scripts/master/content/documentation/godly/grabThing.html).
 
 ### Installation
 Extract or copy the contents of the 'content' folder to the [DAZ Studio](https://www.daz3d.com/) library / content folder.
