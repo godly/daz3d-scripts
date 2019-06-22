@@ -1,0 +1,39 @@
+
+
+/*
+http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/basics/coding_standards/start
+The following is a list of prefixes for the different basic types:
+a       Array type variables
+o       Object any variable that is intended to hold an instance of a QObject or DAZ Script custom class besides those listed below.
+b       Boolean type variables
+n       Number type variables
+s       String type variables
+clr     Color type variables
+pal     Palette type variables
+pix     Pixmap type variables
+date    Date type variables
+pnt     Point type variables
+rect    Rect type variables
+regx    RegExp type variables
+size    Size type variables
+bytes   ByteArray type variables
+font    Font type variables
+box     DzBox3 type variables
+mtx     DzMatrix3 and DzMatrix4 type variables
+vec     DzVec3 type variables
+quat    DzQuat type variables
+t,rng   DzTimeRange type variables
+
+w       DzWidget type variables:
+wDlg    DzDialog
+wDlgLyt DzVBoxLayout, ...
+wGB...  DzVGroupBox
+wDlgCB... Dialog (button, slider, ...) callback function
+
+i, j, k, n - Should only be used to iterate over a for/while loop where the variables i, j, and k are iterators, and n is the total number of iterations.
+x, y, z, w - Should only be used to represent coordinates in 2D or 3D space.
+
+Spacing: Before opening brackets. After closing brackets if no other clothing bracket, linefeed or semicolon is following.
+
+Linefeed: After '{' and '}'.
+*/

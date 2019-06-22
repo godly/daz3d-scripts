@@ -1,0 +1,463 @@
+/**
+* Create controls for an orbit camera. Include this script to use it.
+* Usage:
+if (new DzFile(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libOrbitCamera.dsa").exists()) {
+	include(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libOrbitCamera.dsa");
+	var wDlg = new DzDialog;
+	wDlg.width = 330;
+	var wDlgLyt = new DzVBoxLayout(wDlg);
+	wDlgLyt.autoAdd = true;
+	wDlgLyt.margin = 5;
+	wDlgLyt.spacing = 5;
+	var wGB = new DzVGroupBox( wDlg );
+	// var awSlider = getOrbitCameraControl(wGB); // call without assignment is usually fine as no reference to the sliders is needed
+	getOrbitCameraControl(wGB);
+	wDlg.exec();
+}
+* You may need to use another include path and have your own dialogue code. So you only need the include and 'getOrbitCameraControl(wGB);'.
+* A camera which should be used may be supplied as 2nd parameter. Otherwise a camera named "Orbit-Camera" or the default camera / veiwport will be used.
+* An orbit point to be used may be supplied as 3rd parameter. Otherwise the orbit named "Orbit-Point" or (0, 100, 0) will be used.
+*/
+function getOrbitCameraControl(wGB, strCameraName, strOrbitPoint, nMaxRadius) {
+	var str_DefaultCameraName = "Orbit-Camera";
+	var str_DefaulOrbitName = "Orbit-Point";
+	var g_bInitialized = false;
+	if (!strCameraName) { strCameraName = str_DefaultCameraName; }
+ 	var g_oCamera = Scene.findCameraByLabel(strCameraName);
+	if (!strOrbitPoint) { strOrbitPoint = str_DefaulOrbitName; }
+	if (!nMaxRadius) { nMaxRadius = 1000; }
+ 	var g_oOrbit = Scene.findNodeByLabel(strOrbitPoint);
+	var g_vOrbitPos = new DzVec3( 0, 100, 0 ); // The default point in World Space that we will Orbit
+
+ 	var awSlider = new Array();
+	var wCamOrbitYSlider = addSlider(wGB, wDlgCBProcessCamOrbitSliderChanged, -360, 360, "Longitude (degrees):");
+	var wCamOrbitXSlider = addSlider(wGB, wDlgCBProcessCamOrbitSliderChanged, -90, 90, "Latitude (degrees):");
+	var wCamRadiusSlider = addSlider(wGB, wDlgCBProcessCamRadiusSliderChanged, 10, nMaxRadius, "Radius (cm):");
+ 	function addSlider( wGB, fCallback, nMin, nMax, sLabel ) {
+		wSlider = new DzFloatSlider( wGB );
+		wSlider.min          = nMin;
+		wSlider.max          = nMax;
+		wSlider.label        = sLabel;
+		wSlider.labelVisible = true;
+		wSlider.clamped      = true;
+		wSlider.sensitivity  = 1;
+		wSlider.textEditable = true;
+		connect( wSlider, "valueChanged(float)", fCallback );
+		return wSlider;
+	}
+	
+	function wDlgCBProcessCamOrbitSliderChanged() {
+		// Event handler for a change in OrbitY or OrbitX controls.
+		if( g_oCamera && g_bInitialized ) {
+			// Orbit the Camera about the OrbitPoint:
+
+			// There are a number of different ways to do this.
+			//  This way is relatively simple and intuitive:
+
+			// Convert Orbit Angles in degrees (-180.0 .. 180.0) to radians (-pi .. pi):
+			var nLongitude    = utyDegToRad( wCamOrbitYSlider.value );
+			var nLatitude     = utyDegToRad( wCamOrbitXSlider.value );
+
+			// Position of the Camera if it were Orbiting [0,0,0] instead of g_vOrbitPos:
+			var vNewPos       = g_oCamera.getWSPos().subtract( g_vOrbitPos );
+
+			// Position of the Camera in Spherical coordinates centered at [0,0,0]:
+			//  Convert from [ X       , Y        , Z      ] Cartesian coordinates
+			//            to [ Latitude, Longitude, Radius ] Spherical coordinates
+			var vTriVal       = utyCartesianToSpherical( vNewPos );
+
+			// Retain fixed Radius, set new Latitude and Longitude:
+			vTriVal.x         = nLatitude;
+			vTriVal.y         = nLongitude;
+
+			// New position on the Sphere when centered at [0,0,0]:
+			var vNewPos       = utyCartesianFromSpherical( vTriVal );
+
+			// Position on the Sphere when centered at g_vOrbitPos:
+			vNewPos           = vNewPos.add( g_vOrbitPos );
+
+			// Apply the new position:
+			g_oCamera.setWSPos( vNewPos );
+
+			// Re-Orient the Camera to point at the OrbitPoint again:
+			g_oCamera.aimAt( g_vOrbitPos );
+
+		} // We have a Camera
+	}
+	
+	function wDlgCBProcessCamRadiusSliderChanged() {
+		if( g_oCamera && g_bInitialized ) {
+			// Change the Radius of the Camera's Orbit:
+
+			// There are a number of different ways to do this.
+			//  This way is relatively simple and intuitive:
+
+			// Position of the Camera if it were Orbiting [0,0,0] instead of g_vOrbitPos:
+			var vNewPos       = g_oCamera.getWSPos().subtract( g_vOrbitPos );
+
+			// Position of the Camera in Spherical coordinates centered at [0,0,0]:
+			//  Convert from [ X       , Y        , Z      ] Cartesian coordinates
+			//            to [ Latitude, Longitude, Radius ] Spherical coordinates
+			var vTriVal       = utyCartesianToSpherical( vNewPos );
+
+			// Retain fixed Latitude and Longitude, set new Radius:
+			vTriVal.z         = Math.max(10, wCamRadiusSlider.value);
+
+			// Position on the new Sphere centered at [0,0,0]:
+			var vNewPos       = utyCartesianFromSpherical( vTriVal );
+
+			// Position on the Sphere when centered at g_vOrbitPos:
+			vNewPos           = vNewPos.add( g_vOrbitPos );
+
+			// Apply the new position:
+			g_oCamera.setWSPos( vNewPos );
+
+			// Re-Orient the Camera to point at the OrbitPoint again:
+			g_oCamera.aimAt( g_vOrbitPos );
+
+		} // We have a Camera
+	}
+	
+	
+	
+	function  dlgInitialize() {
+		print("dlgInitialize ...");
+		// Initialize the controls from the Scene:
+
+		//---Get the Camera to control---
+
+		// If there is a visible Perspective Camera labelled "Orbit-Camera" then use it:
+		if( g_oCamera ) {
+			// Cannot Orbit an Ortho Camera:
+			if ( ( g_oCamera.type == DzCamera.PERSPECTIVE_CAMERA ) || ( g_oCamera.type == DzCamera.GENERAL_CAMERA ) ) {
+				if ( !g_oCamera.isVisible() ) {    // Let User enable/disable it via its Visibility
+					g_oCamera     = undefined;
+				}
+			} else {
+				g_oCamera       = undefined;
+			}
+		}
+
+		if( !g_oCamera ) {
+			// Default: Use the built-in Perspective Camera
+			utyExecuteAction( "DzPerspectiveViewAction" );
+			g_oCamera         = utyGetActiveCamera();
+			if( g_oCamera ) {
+				// Cannot Orbit an Ortho Camera:
+				if(  ( g_oCamera.type == DzCamera.PERSPECTIVE_CAMERA ) ) {
+					// OK
+				} else {
+					g_oCamera     = undefined;
+				}
+			}
+		}
+
+
+		if( g_oCamera ) {
+			// Got a Camera OK
+			//---Get the Orbit Point---
+			// If there is a visible Node labelled '$strOrbitPoint' then use it:
+			if( g_oOrbit && g_oOrbit.isVisible() ) {      // Let User enable/disable it via its Visibility
+				g_vOrbitPos     = g_oOrbit.getWSPos();
+			}
+			//---Load data from the Scene---
+			dlgLoadControlsFromScene();
+			g_bInitialized    = true;
+		}
+
+		print("... dlgInitialize");
+
+	}
+  function dlgLoadControlsFromScene() {   // : void
+	  print("dlgLoadControlsFromScene...");
+    if( g_oCamera ) {
+      // Inverse of dlgProcessCamOrbitSliderChanged():
+
+      // Get the Camera position in Spherical coordinates:
+      //  Convert from [ X       , Y        , Z      ] Cartesian coordinates
+      //            to [ Latitude, Longitude, Radius ] Spherical coordinates
+      var vTriVal       = utyCartesianToSpherical( g_oCamera.getWSPos() );
+
+      wCamOrbitYSlider.value  = utyRadToDeg( vTriVal.y );   // Longitude
+      wCamOrbitXSlider.value  = utyRadToDeg( vTriVal.x );   // Latitude
+      wCamRadiusSlider.value  =              vTriVal.z  ;   // Radius
+
+    }
+	  print("...dlgLoadControlsFromScene");
+
+  }
+  
+	
+	
+
+
+
+	//============================================================================
+	//---Utilities---
+	//============================================================================
+
+  // Useful constants that we calculate once only:
+  var g_nPi             = Math.PI;
+  var g_nHalfPi         = g_nPi * 0.5;
+  var g_n2Pi            = g_nPi * 2;
+  var g_n1div2Pi        = 1 / g_n2Pi;
+  var g_nUtyDegToRadFactor = ( g_nPi / 180 );     // For efficiency, calculate this just once
+  var g_nUtyRadToDegFactor = ( 180 / g_nPi );     // For efficiency, calculate this just once
+
+  // Any Number having Math.abs() value less that this we sometimes treat as "equivalent to Zero":
+  var g_nUtyAlmostZero  = 0.000001;
+
+  //------------------------------------
+
+  function  utyShowInfo( p_sMsg )     // : void
+  {
+    MessageBox.information( p_sMsg, "Camera Orbit", "&OK", "" );
+  };
+
+  //------------------------------------
+
+
+  function  utyDegToRad( p_nValue ) {     // : Number
+    // Convert Degrees to Radians
+    return  p_nValue * g_nUtyDegToRadFactor;
+  }
+
+  //------------------------------------
+
+
+  function  utyRadToDeg( p_nValue ) {     // : Number
+    // Convert Radians to Degrees
+    return  p_nValue * g_nUtyRadToDegFactor;
+  }
+
+  //------------------------------------
+
+  function  utyNormalizePi( p_nAngleRad ) {        // : Number (radians)
+    // Convert p_nAngleRad to be in our "canonical" range: -PI .. PI:
+
+    var nResult         = p_nAngleRad;
+
+    if(  ( nResult < -g_nPi )
+      || ( nResult >  g_nPi )
+      ) {
+      // Add or subtract the relevant multiple of (2 * PI):
+      nResult           = nResult + g_nPi;
+      nResult           = nResult - ( ( Math.floor( nResult * g_n1div2Pi ) * g_n2Pi ) );
+      nResult           = nResult - g_nPi;
+    }
+
+    return nResult;
+  }
+
+  //------------------------------------
+
+  function  utyCartesianToSpherical( p_vVec ) {      // : DzVec3     // [ X       , Y        , Z      ] Cartesian coordinates
+                                                     // : DzVec3     // [ Latitude, Longitude, Radius ] Spherical coordinates
+    // Ref_1: Wikipedia: Spherical coordinate system
+    //  https://en.wikipedia.org/wiki/Spherical coordinate system - Wikipedia, the free encyclopedia.htm
+
+    // Note \\\Conventions:
+    // --------------------
+    //  Cartesian coordinates of a Point on the surface of a Sphere:
+    //    X, Y, Z are per DAZ Studio conventions.
+    //  Spherical coordinates of a Point on the surface of a Sphere:
+    //    There are many different conventions for Spherical coordinates.
+    //      We use these because they are familiar from maps of the Earth:
+    //    Longitude:
+    //      The angle in the XZ plane between the Z-Axis and the projection of the Point's vector from the center onto the XZ plane.
+    //      Range is -PI to PI, i.e. -180 to 180 degrees.
+    //      Positive is clockwise when viewed in the direction of the positive Y-Axis (from the Center towards he North Pole).
+    //        i.e. Longitude East is positive
+    //        i.e. Longitude West is negative
+    //        This matches the operation of the Orbit control in the DAZ Studio Viewport.
+    //    Latitude:
+    //      Is the angle between the XZ plane and the Point's vector from the center, which is equivalent to:
+    //      The angle in the XY plane between the X-Axis and the Point's vector from the center,
+    //        if the Point were Orbited at constant Latitude to have Longitude = -90 degrees.
+    //      Positive is clockwise when viewed in the direction of the positive Z-Axis.
+    //        i.e. Latitude North is positive
+    //        i.e. Latitude South is negative
+    //        This matches the operation of the Orbit control in the DAZ Studio Viewport.
+    //    Radius:
+    //      Radius of Sphere = sqrt( sqr(x) + sqr(y) +sqr(z) )
+    //  When stored in a DzVec3:
+    //    DzVec3.x  contains X or Latitude
+    //    DzVec3.y  contains Y or Longitude
+    //    DzVec3.z  contains Z or Radius
+
+    var nLatitude       = 0;
+    var nLongitude      = 0;
+
+    // Radius of Sphere = sqrt( sqr(x) + sqr(y) +sqr(z) ):
+    var nSqrXplusSqrZ   = ( p_vVec.x * p_vVec.x ) + ( p_vVec.z * p_vVec.z );
+    var nRadius         = Math.sqrt( nSqrXplusSqrZ + ( p_vVec.y * p_vVec.y ) );
+
+    if( nRadius < g_nUtyAlmostZero ) {          // Or < 0
+      // Invalid, or degenerate case
+      //  Reset/Default to safe values:
+      nLatitude         = 0;
+      nLongitude        = 0;
+      nRadius           = 1;
+
+    } else {
+
+      // Math.atan2() caters for p_vVec.z == 0:
+      // See Note \\\Conventions: Longitude_East is positive:
+      nLongitude      = Math.atan2( p_vVec.x, p_vVec.z );       // -PI .. PI : -180 .. 180 degrees
+
+      if( Math.abs( p_vVec.y ) < g_nUtyAlmostZero ) {
+        nLatitude       = 0;                    // On the Equator
+      } else {
+        // We must prevent DivideByZero here when nSqrXplusSqrZ == 0:
+        // Math.sqrt( nSqrXplusSqrZ ) is the projection of the Point's vector onto the XZ plane:
+        if( Math.abs( nSqrXplusSqrZ ) < g_nUtyAlmostZero ) {
+          // The Point is on the Y-Axis:
+          //  NB: nLongitude can be anything - potential for gimbal lock.
+          if( p_vVec.y < 0 ) {
+            nLatitude   = - g_nHalfPi;          // At the South Pole: -90 degrees
+          } else {
+            nLatitude   =   g_nHalfPi;          // At the North Pole:  90 degrees
+          }
+        } else {
+          nLatitude     = Math.atan( p_vVec.y / Math.sqrt( nSqrXplusSqrZ ) );     // -PI/2 .. PI/2 : -90..90 degrees
+        }
+      }
+
+    } // General case
+
+    // Ensure that nLongitude is in our "canonical" range: -PI .. PI:
+    nLongitude          = utyNormalizePi( nLongitude );
+
+    // Ensure that nLatitude is in our "canonical" range: -PI/2 .. PI/2:
+    nLatitude           = utyNormalizePi( nLatitude );    // Convert to -PI .. PI
+    if(        nLatitude >  g_nHalfPi ) {
+      // Invalid: Correct it
+      nLatitude         =  g_nHalfPi;
+    } else if( nLatitude < -g_nHalfPi ) {
+      // Invalid: Correct it
+      nLatitude         = -g_nHalfPi;
+    }
+
+    var nResult         = new DzVec3;
+    nResult.x           = nLatitude;
+    nResult.y           = nLongitude;
+    nResult.z           = nRadius;
+
+    return nResult;
+  } // utyCartesianToSpherical()
+
+  //------------------------------------
+
+  function  utyCartesianFromSpherical( p_vTriVal ) {    // : DzVec3   // [ Latitude, Longitude, Radius ] Spherical coordinates
+                                                        // : DzVec3   // [ X       , Y        , Z      ] Cartesian coordinates
+    // Ref_1: Wikipedia: Spherical coordinate system
+    //  https://en.wikipedia.org/wiki/Spherical coordinate system - Wikipedia, the free encyclopedia.htm
+
+    var nResult         = new DzVec3( 0, 0, 0 );
+
+    // See Note \\\Conventions:
+    var nLatitude       = p_vTriVal.x;
+    var nLongitude      = p_vTriVal.y;
+    var nRadius         = p_vTriVal.z;
+
+    if( Math.abs( nRadius ) < g_nUtyAlmostZero ) {
+      // Invalid, or degenerate case
+      //  Reset/Default to safe values:
+      nResult.x         = 0;
+      nResult.y         = 0;
+      nResult.z         = 1;
+
+    } else {
+
+      // Y = Radius * sin( Latitude );
+      // See utyCartesianToSpherical():
+      //  Ensure that nLatitude is in our "canonical" range: -PI/2 .. PI/2:
+      nLatitude         = utyNormalizePi( nLatitude );    // Convert to -PI .. PI
+      if(        nLatitude >  g_nHalfPi ) {
+        // Invalid: Correct it
+        nLatitude       =  g_nHalfPi;
+      } else if( nLatitude < -g_nHalfPi ) {
+        // Invalid: Correct it
+        nLatitude       = -g_nHalfPi;
+      }
+      nResult.y         = nRadius * Math.sin( nLatitude );
+
+      // Ensure that nLongitude is in our "canonical" range: -PI .. PI:
+      nLongitude        = utyNormalizePi( nLongitude );
+
+      // See Note \\\Conventions:
+      //  Comparing with Ref_1 = https://en.wikipedia.org/wiki/Spherical coordinate system - Wikipedia, the free encyclopedia.htm
+      //    Ref_1 Z is North,
+      //      but we use Y as North.
+      //    Ref_1 measures Azimuth Phi from the X-Axis,
+      //      but we measure Longitude from the Z-Axis.
+      //    Ref_1 Theta is Inclination from North,
+      //      but our Latitude is Elevation from the Equatorial plane,
+      //      so we use cos( Latitude ) instead of sin( Theta ) like Ref_1.
+      //
+      var nCosLatitude  = Math.cos( nLatitude );
+      nResult.x         = nRadius * Math.sin( nLongitude ) * nCosLatitude;
+      nResult.z         = nRadius * Math.cos( nLongitude ) * nCosLatitude;
+
+    } // General case
+
+    return nResult;
+  }  // utyCartesianFromSpherical()
+
+  //------------------------------------
+
+  function utyGetViewportMgr() {       // : DzViewportNgr
+    return MainWindow.getViewportMgr();
+  }
+
+  //------------------------------------
+
+  function utyGetActiveViewport() {    // : DzViewport
+    return utyGetViewportMgr().getActiveViewport();
+  }
+
+  //------------------------------------
+
+  function utyGetActive3DViewport() {   // : Dz3DViewport
+    return utyGetActiveViewport().get3DViewport();
+  }
+
+  //------------------------------------
+
+  function utyGetActiveCamera() {      // : DzCamera
+    return utyGetActive3DViewport().getCamera();
+  }
+
+  //------------------------------------
+
+  function  utyExecuteAction( p_sActionID ) {  // : Boolean
+    var oAction           = MainWindow.getActionMgr().findAction( p_sActionID );
+    if( oAction ) {
+      oAction.trigger();
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+
+	//============================================================================
+	//---Main Routine---
+	//============================================================================
+
+	// Initialize the dialog:
+	print("main");
+	dlgInitialize();
+
+	if( g_oCamera ) {
+		/// Loaded successfully a camera
+		awSlider[0] = wCamOrbitXSlider;
+		awSlider[1] = wCamOrbitYSlider;
+		awSlider[2] = wCamRadiusSlider;
+		return awSlider;
+	} else {
+		return false;
+	}
+}
+
+

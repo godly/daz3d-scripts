@@ -22,7 +22,9 @@
 /**
 * Global variables needed for the loaded library
 */
-const libraryFile = "godly/zzLib/zzLib.dsa";
+const strLibraryFile = "godly/zzLib/zzLib.dsa";
+const strLibraryFile2 = "godly/zzLib/libOrbitCamera.dsa";
+
 const s_AppName = "mcjHatsAreTheFashionOfTheDay";
 const b_isDebug = true;
 var nr_Tab = 1;
@@ -41,8 +43,12 @@ var oCollider;
 const helpMsg =  " Usage:\n- Make sure that the character is not parented to anything.\n- Select the hair of the character and start the script.\n  - A plane 'plane_Hat_CharacterName' will be created and the script exits. Parent it to the hat and adjust the height and orientation as needed.\n- Select the hair of the character and start the script again.\n- Click the 'Make Hair Morph' button.\n";
 function main() {
 	
-	if (!includeScript(libraryFile)) {
-		print("ERROR\tmain\tScript '" + libraryFile + "' not found.");
+	if (!includeScript(strLibraryFile)) {
+		print("ERROR\tmain\tScript '" + strLibraryFile + "' not found.");
+		return false;
+	}
+	if (!includeScript(strLibraryFile2)) {
+		print("ERROR\tmain\tScript '" + strLibraryFile2 + "' not found.");
 		return false;
 	}
 	
@@ -258,12 +264,18 @@ if( ( nodeHair ) && ( oCollider ) )
 	btn9 = addButtonToGB( gbC, "0%/100% Morph", toggleMorphValue );
 
 	wDlg.setRejectButton( btn7 );
+	
+	// Cam rotation via Dlg - orbit around hat (plane center)
+	oPlane.setVisible(true);
+	getOrbitCameraControl(new DzVGroupBox( wDlg ), "", strPlaneName);
+
 	wDlg.minWidth = 400;
 	wDlg.exec();
 
 	delCollider(strColliderName);
 	saveAllSettings();
 }
+
 /** some more code **/
 function toggleoPlaneVisibility() {
 	oPlane.setVisible(!oPlane.isVisible());
@@ -369,6 +381,7 @@ function doit()
 	}
 	var bCancelled = false;
 	startProgress( "Progress", n, true , true );
+	var v, uv, dir, r, nuv, d;
 	for( var i = 0; i < n; i++ )
 	{
 		if( i % progressStep == 0 )
@@ -381,16 +394,15 @@ function doit()
 			bCancelled = true;
 			break;
 		}
-		var v = nodeHairGeom.getVertex( i );
-		var uv = untransformoPlaneDelta( v );
-		if( uv.y > -bendDist )
-		{
+		v = nodeHairGeom.getVertex( i );
+		uv = untransformoPlaneDelta( v );
+		if( uv.y > -bendDist ) {
 			oCollider.setWSPos( oPlaneCenter );
-			var dir = v.subtract( oPlaneCenter );
-			var r = dir.getRotationTo( vUp )
+			dir = v.subtract( oPlaneCenter );
+			r = dir.getRotationTo( vUp )
 			oCollider.setWSRot( r );
 			oCollider.activated();
-			var nuv = oCollider.getWSPos();
+			nuv = oCollider.getWSPos();
 			if( nuv.subtract( oPlaneCenter ).length() > 0.001 );
 			{
 				if( cbFarOut.checked )
@@ -398,7 +410,7 @@ function doit()
 					nuv = oCollider.getHitMaxPos();  
 
 				}
-				var d = nuv.subtract( v );
+				d = nuv.subtract( v );
 				if( off != 0 )
 				{
 					dir.normalize()
@@ -434,7 +446,7 @@ function doit()
 	}
 	if( !bCancelled )
 	{
-		toMorph( nodeHairObj, newMorphName, deltas )
+		toMorph( nodeHairObj, newMorphName, deltas );
 	}
 }
 

@@ -1,0 +1,131 @@
+/****************************************************************************/
+/**
+* printContentDirectories
+* Iterate over all known content directories and print the path.
+* Use System.getenv() to access the system temp path: %tmp% or $tmp
+* Create a mapping to an alternative path in system-temp (usually C:\Users\%USERNAME%\AppData\Local\Temp or /tmp)
+* Store mapping in registry (Windows Registry / Mac Carbon Preferences)
+* Delete everything related to this test from the registry
+*/
+
+const s_AppName = "test";
+
+const n_ContentDirectories = App.getContentMgr().getNumContentDirectories();
+var aStr_ContentDir = new Array(n_ContentDirectories);
+var aStr_TempContentDir = new Array(n_ContentDirectories);
+const str_TempPath = System.getenv("tmp").replace(/\\/g, '/');
+const str_TempContentDirKey = "tempContentDir";
+var i;
+
+print("Initial run:");
+cleanUp();
+dumpData();
+
+print("Modified data:");
+saveSetting("tempContentDir0", "n:/daz");
+dumpData();
+
+cleanUp();
+
+/****************************************************************************/
+/**
+* cleanUp(): Deletes custom 'Windows Registry / Mac Carbon Preferences' keys
+*/
+
+function cleanUp() {
+	for (i=0; i<n_ContentDirectories; i++) {
+		removeSetting(str_TempContentDirKey + i);
+	}
+}
+/****************************************************************************/
+/**
+* dumpData(): Iterates over the content directory paths and prints them together with an alternative path
+*/
+function dumpData() {
+	for (i=0; i<n_ContentDirectories; i++) {
+		aStr_ContentDir[i] = App.getContentMgr().getContentDirectoryPath(i);
+		aStr_TempContentDir[i] = getSetting(str_TempContentDirKey + i, str_TempPath + "/Daz3D/" + i);
+		print(aStr_ContentDir[i] +" --> " + aStr_TempContentDir[i]);
+	}	
+}
+
+/****************************************************************************/
+/**
+* removeSetting() removes a key from the 'Windows Registry / Mac Carbon Preferences' 
+* strKey: The key to be removed.
+*/
+function removeSetting( strKey ) {
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	m_oMgr.removeValue( strKey );
+}
+
+// License and copyright for the code above:
+// by godly
+// You can use this script freely for personal or commercial use./
+// You may not sell, resell, sub-license or rent this models in any way./
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+/****************************************************************************/
+
+// License and copyright for the following lines of code:
+// by mCasual/Jacques 2019
+// You can use this script freely for personal or commercial use./
+// You may not sell, resell, sub-license or rent this models in any way./
+// you may credit this script to mCasual/Jacques/
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+//==============================================================================
+// load key/val from  Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function getSetting( strKey, strDefaultValue ) {
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	var strValue = m_oMgr.getStringValue( strKey, strDefaultValue );
+	m_oMgr.popPath();
+	return strValue;
+}
+
+//==============================================================================
+// save key/val in Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function saveSetting( strKey, strValue ) {
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( s_AppName );
+	m_oMgr.setStringValue( strKey, strValue );
+	m_oMgr.popPath();
+}
+
+//==============================================================================
+// load key/val from  Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function getBoolSetting( strKey, bDefaultValue ) {
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( appName );
+	var bValue = m_oMgr.getBoolValue( strKey, bDefaultValue );
+	m_oMgr.popPath();
+	return ( bValue );
+}
+
+//==============================================================================
+// save key/val in Registry for Windows, 
+// via the Carbon Preferences API for Mac
+//==============================================================================
+function saveBoolSetting( strKey, bValue ) {
+	var m_oMgr = App.getAppSettingsMgr();
+	m_oMgr.pushPath( appName );
+	m_oMgr.setBoolValue( strKey, bValue );
+	m_oMgr.popPath();
+}
+
