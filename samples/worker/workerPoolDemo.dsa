@@ -1,0 +1,28 @@
+/**
+* Not really useful as DazScript is single-threaded.
+* Single-Core speed matters for scripts.
+*/
+
+const nCores = 16; // or find a way to fetch #cores within DazScript
+if (new DzFile(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libWorkerPool.dsa").exists()) {
+	include(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libWorkerPool.dsa");
+	var workers = new WorkerPool(nCores, backgroundWorker);
+	for (var i=0; i<20; i++) {
+		print("Starting " + i);
+		workers.go("I am number " + i);
+	}
+}
+function backgroundWorker(workerId, objParam) {
+	var t = new Date().getTime() + (1+workerId) * 1000;
+	print("backgroundWorker" + workerId + " - " + objParam + " - " + t);
+	while(true) {
+		if (t > new Date().getTime()) {
+			break;
+		}
+		sleep(1000);
+		print("backgroundWorker" + workerId + " - ... - " + new Date().getTime());
+		processEvents();
+	}1
+	print("backgroundWorker" + workerId + " - Done");
+}
+

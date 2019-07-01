@@ -1,0 +1,77 @@
+/**
+* orbitCamera.dsa
+*
+*/
+
+( function() {
+	/**
+	* includeScript() includes a script.
+	* strScriptName: The script name.
+	* aStrParameters: Skip or set to false to include the script. Setting this parameter to an array of strings ["a=1", "b=2"] will execute the script with these parameters.
+	*/
+	function includeScript(strScriptName, aStrParameters) {
+		var sFunctionName = "includeScript"; 	
+		if (b_isDebug) {
+			print("DEBUG\t" + sFunctionName + "\tinit(" + strScriptName + ", " + aStrParameters + ")");
+		}
+		var strScriptNamePath = "";
+		var i = 0;
+		while (i < App.getContentMgr().getNumContentDirectories()) {
+			strScriptNamePath = App.getContentMgr().getContentDirectoryPath(i) + "/scripts/" + strScriptName;
+			if (new DzFile(strScriptNamePath).exists()) {
+				break;
+			}
+			i++;
+			strScriptNamePath = "";
+		}
+		if (strScriptNamePath != "") {
+			if (!aStrParameters) {
+				include(strScriptNamePath);
+				return true;
+			}
+			var oScript = new DzScript(strScriptNamePath);
+			if (oScript.loadFromFile(strScriptNamePath, true)) {
+				var rv = oScript.execute(aStrParameters);
+				// use getArguments() in the script to read the parameters
+				// http://docs.daz3d.com/doku.php/public/software/dazstudio/4/referenceguide/scripting/api_reference/samples/remote_operation/sub_script/start#example_callee
+				return rv;
+			} else {
+				if (b_isDebug) {
+					print("DEBUG\t" + sFunctionName + "\tFound script at '" + strScriptNamePath + "' but could not execute it.");
+				}
+				return false;
+			}
+		}
+		print("ERROR\t" + sFunctionName + "\tScript '" + strScriptName + "' not found.");
+		return false;		
+	}
+
+	function main() {
+		if (!includeScript(str_LibraryFile)) {
+			print("ERROR\tmain\tScript '" + str_LibraryFile + "' not found.");
+			return false;
+		}
+		var wDlg = new DzDialog;
+		wDlg.caption = s_AppName;
+		wDlg.width = 400;
+		var wDlgLyt = new DzVBoxLayout(wDlg);
+		wDlgLyt.autoAdd = true;
+		wDlgLyt.margin = 5;
+		wDlgLyt.spacing = 5;
+		var wGB = new DzVGroupBox( wDlg );
+		getOrbitCameraControl(wGB);
+		wDlg.exec();
+	}
+	
+	/****************************************************************************/
+	/**
+	* Global variables needed for the loaded library
+	*/
+	const str_LibraryFile = "godly/zzLib/libOrbitCamera.dsa";
+
+	const s_AppName = "orbitCamera";
+	const b_isDebug = true;
+	var nr_Tab = 1;
+
+	main();
+} ) ();

@@ -1,0 +1,32 @@
+/**
+* mvNode2Node
+* Two nodes must be selected.
+* The 1st selected node will be move to the position of the 2nd selected node.
+*
+*/
+( function() {
+	const s_AppName = "mvNode2Node";
+
+	if( Scene.getNumSelectedNodes() == 2 ) {
+		var bCtrl = ctrlPressed();
+		var oNode1 = Scene.getSelectedNode(0);
+		var oNode2 = Scene.getSelectedNode(1);
+		
+		try {
+			beginUndo();
+			if (bCtrl) {
+				oNode2.addNodeChild(oNode1);
+			}
+
+			// get position of node 2
+			var vecNode2 = oNode2.getWSPos(); 
+			
+			// position node 1 there
+			oNode1.setWSPos(vecNode2);
+		} finally {
+			acceptUndo(qsTr(s_AppName));
+		}
+	} else {
+		MessageBox.information( "Select 1st the node(1) to be moved and 2nd the target node(2).\nThen start the script.\n\nNode(1) will be move to the postion of node(2).\nStart the script with 'Ctrl' pressed to parent it also." , s_AppName, "OK"  );
+	}		
+})();

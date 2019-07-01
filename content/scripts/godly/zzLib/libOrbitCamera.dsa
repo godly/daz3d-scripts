@@ -17,6 +17,22 @@ if (new DzFile(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/
 * You may need to use another include path and have your own dialogue code. So you only need the include and 'getOrbitCameraControl(wGB);'.
 * A camera which should be used may be supplied as 2nd parameter. Otherwise a camera named "Orbit-Camera" or the default camera / veiwport will be used.
 * An orbit point to be used may be supplied as 3rd parameter. Otherwise the orbit named "Orbit-Point" or (0, 100, 0) will be used.
+*
+*
+* Code copied from and based on: https://www.daz3d.com/forums/discussion/85971/a-script-to-orbit-camera-around-a-point
+* Copyright and license:
+// Posted to DAZ Script Developer forum by Praxis on 09-May-2016
+//****************************************************************************
+//---The usual legal stuff---
+// You can use this script freely for personal or commercial use.
+// It is provided without any obligation for maintenance or support by the author.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
 */
 function getOrbitCameraControl(wGB, strCameraName, strOrbitPoint, nMaxRadius) {
 	var str_DefaultCameraName = "Orbit-Camera";
@@ -30,7 +46,7 @@ function getOrbitCameraControl(wGB, strCameraName, strOrbitPoint, nMaxRadius) {
 	var g_vOrbitPos = new DzVec3( 0, 100, 0 ); // The default point in World Space that we will Orbit
 
  	var awSlider = new Array();
-	var wCamOrbitYSlider = addSlider(wGB, wDlgCBProcessCamOrbitSliderChanged, -360, 360, "Longitude (degrees):");
+	var wCamOrbitYSlider = addSlider(wGB, wDlgCBProcessCamOrbitSliderChanged, -180, 180, "Longitude (degrees):");
 	var wCamOrbitXSlider = addSlider(wGB, wDlgCBProcessCamOrbitSliderChanged, -90, 90, "Latitude (degrees):");
 	var wCamRadiusSlider = addSlider(wGB, wDlgCBProcessCamRadiusSliderChanged, 10, nMaxRadius, "Radius (cm):");
  	function addSlider( wGB, fCallback, nMin, nMax, sLabel ) {

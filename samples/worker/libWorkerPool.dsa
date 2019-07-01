@@ -1,0 +1,77 @@
+/**
+* Creates a worker pool of up to 64 workers. Not really useful as DazScript is single-threaded.
+* Single-Core speed matters for scripts.
+* Switching between workers with processEvents() does not work.
+*
+* Usage:
+const nCores = 16; // or find a way to fetch #cores within DazScript
+if (new DzFile(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libWorkerPool.dsa").exists()) {
+	include(App.getContentMgr().getContentDirectoryPath(0) + "/scripts/godly/zzLib/libWorkerPool.dsa");
+	var workers = new WorkerPool(nCores, backgroundWorker);
+	for (var i=0; i<20; i++) {
+		workers.go("I am number " + i);
+	}
+}
+function backgroundWorker(workerId, objParam) {
+	print("backgroundWorker" + workerId + " - " + objParam);
+	// more useful code
+}
+
+*
+* TODO: wait for Daz to support threads
+* TODO: protect vars properly
+* TODO: implemenent removeWorkers
+*/
+const maxWorkers = 64;
+var ao_Worker = new Array(maxWorkers);
+var ao_WorkerParam = new Array(maxWorkers);
+var ab_WorkerIdle = new Array(maxWorkers);
+
+function WorkerPool(nCores, fCallBack) {
+	this.nCores = nCores;
+	this.fCallBack = fCallBack;
+	// create workers
+	function createWorkers() {
+		for (var i=0; i<nCores; i++) {
+			ao_Worker[i] = new DzTimer();
+			ao_WorkerParam[i] = '';
+			ao_Worker[i].singleShot = true;
+			(function(j) {
+				ao_Worker[i].timeout.connect(
+					function(){ 
+						runWorker(fCallBack, j); // runWorker(cb, 0), runWorker(cb, 1), ...
+					}
+				);
+			})(i);
+			ab_WorkerIdle[i] = true;
+		}
+	}
+	createWorkers();
+}
+WorkerPool.prototype.getWorkerId = function() {
+	// not thread safe
+	while(true) {
+		for (var i=0; i<nCores; i++) {
+			if (ab_WorkerIdle[i]) {
+				ab_WorkerIdle[i] = false;
+				return i;
+			}
+		}
+		// all workers are busy
+		print("All workers are busy ...");
+		processEvents();
+	}
+}
+function freeWorkerId(nrWorker) {
+	ab_WorkerIdle[nrWorker] = true;
+}
+
+function runWorker(fCallBack, nrWorker) {
+	fCallBack(nrWorker, ao_WorkerParam[nrWorker]);
+	freeWorkerId(nrWorker);
+}
+WorkerPool.prototype.go = function(objParam) {
+	var nrWorker = this.getWorkerId();
+	ao_WorkerParam[nrWorker] = objParam;
+	ao_Worker[nrWorker].start(nrWorker); 
+}
